@@ -43,16 +43,6 @@
         "dest": "/index.html"
       }
     ],
-    "functions": {
-      "api/**/*.js": {
-        "memory": 512,
-        "maxDuration": 10
-      },
-      "api/ai/proxy.js": {
-        "memory": 1024,
-        "maxDuration": 30
-      }
-    },
     "headers": [
       {
         "source": "/(.*)",
@@ -97,16 +87,5 @@
           }
         ]
       }
-    ],
-    "env": {
-      "VITE_SUPABASE_URL": "",
-      "VITE_SUPABASE_ANON_KEY": "",
-      "VITE_SINGLE_USER_ID": "",
-      "SUPABASE_SERVICE_ROLE_KEY": "",
-      "DEEPSEEK_API_KEY": "",
-      "DEEPSEEK_API_URL": "",
-      "VITE_AI_PROXY_URL": "",
-      "RATE_LIMIT_PER_HOUR": "",
-      "CACHE_TTL_HOURS": ""
-    }
+    ]
   }
