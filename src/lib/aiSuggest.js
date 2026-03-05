@@ -1,4 +1,5 @@
 const DEFAULT_AI_SUGGEST_ENDPOINT = '/api/ai/suggest';
+const WEIGHT_STEP_KG = 0.5;
 
 function getRuntimeEnv() {
   if (typeof import.meta !== 'undefined' && import.meta.env) {
@@ -23,6 +24,30 @@ function isLikelyLocalApiPath(url) {
 function shouldUseLocalHeuristicOnly(endpoint) {
   const env = getRuntimeEnv();
   return Boolean(env.DEV) && isLikelyLocalApiPath(endpoint);
+}
+
+function parseNumericValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.replace(',', '.').trim();
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundToStep(value, step = WEIGHT_STEP_KG) {
+  return Math.round(value / step) * step;
+}
+
+function formatRoundedWeight(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function normalizeSuggestions(data) {
@@ -253,26 +278,35 @@ export async function requestSessionSummary({
 }
 
 export function formatWeightValue(value) {
-  const parsed = Number(value);
+  const parsed = parseNumericValue(value);
 
-  if (!Number.isFinite(parsed)) {
+  if (parsed === null) {
     return '';
   }
 
-  const rounded = Math.round(parsed * 2) / 2;
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  const rounded = roundToStep(parsed);
+  return formatRoundedWeight(rounded);
 }
 
 export function applyWeightChange({ currentWeight, fallbackWeight, multiplier }) {
-  const base = Number(currentWeight);
+  const base = parseNumericValue(currentWeight);
 
-  if (Number.isFinite(base) && base > 0) {
-    return formatWeightValue(base * multiplier);
+  if (base !== null && base > 0) {
+    const candidate = roundToStep(base * multiplier);
+
+    // Keep quick actions observable: if rounded result equals current value,
+    // nudge by one step in the expected direction.
+    const adjusted =
+      Math.abs(candidate - base) < 0.0001
+        ? (multiplier >= 1 ? base + WEIGHT_STEP_KG : Math.max(0, base - WEIGHT_STEP_KG))
+        : candidate;
+
+    return formatRoundedWeight(roundToStep(adjusted));
   }
 
-  const fallback = Number(fallbackWeight);
-  if (Number.isFinite(fallback) && fallback > 0) {
-    return formatWeightValue(fallback * multiplier);
+  const fallback = parseNumericValue(fallbackWeight);
+  if (fallback !== null && fallback > 0) {
+    return formatRoundedWeight(roundToStep(fallback * multiplier));
   }
 
   return '';

@@ -184,5 +184,21 @@ describe('log workout ai flow', () => {
         multiplier: 0.95
       })
     ).toBe('95');
+
+    expect(
+      applyWeightChange({
+        currentWeight: '4',
+        fallbackWeight: null,
+        multiplier: 1.05
+      })
+    ).toBe('4.5');
+
+    expect(
+      applyWeightChange({
+        currentWeight: '4,5',
+        fallbackWeight: null,
+        multiplier: 1.05
+      })
+    ).toBe('5');
   });
 });

@@ -11,6 +11,20 @@ import {
 } from '../lib/aiSuggest';
 import { callToolsApi } from '../lib/toolsClient';
 
+function parseNumberInput(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const normalized = String(value).replace(',', '.').trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export default function LogWorkoutPage() {
   const navigate = useNavigate();
   const [workout, setWorkout] = useState(null);
@@ -46,9 +60,9 @@ export default function LogWorkoutPage() {
     : null;
 
   const canChangeWeight =
-    Number.isFinite(Number(quickSet.weight_kg)) ||
-    Number.isFinite(Number(lastExerciseSet?.weight_kg)) ||
-    Number.isFinite(Number(autofillSuggestion?.payload?.weight_kg));
+    parseNumberInput(quickSet.weight_kg) !== null ||
+    parseNumberInput(lastExerciseSet?.weight_kg) !== null ||
+    parseNumberInput(autofillSuggestion?.payload?.weight_kg) !== null;
 
   useEffect(() => {
     loadExercises();
@@ -196,12 +210,18 @@ export default function LogWorkoutPage() {
 
     try {
       // Источник: CONSTRAINTS - reps>=1, weight>=0
-      const weight = parseFloat(quickSet.weight_kg);
+      const weight = parseNumberInput(quickSet.weight_kg);
       const reps = parseInt(quickSet.reps, 10);
-      const rpe = quickSet.rpe ? parseFloat(quickSet.rpe) : null;
+      const parsedRpe = parseNumberInput(quickSet.rpe);
+      const rpe = parsedRpe !== null && parsedRpe > 0 ? parsedRpe : null;
 
-      if (weight < 0 || reps < 1) {
+      if (weight === null || weight < 0 || reps < 1) {
         alert('Вес ≥0, повторения ≥1');
+        return;
+      }
+
+      if (rpe !== null && (rpe < 1 || rpe > 10)) {
+        alert('RPE должен быть от 1 до 10');
         return;
       }
 
@@ -480,8 +500,8 @@ export default function LogWorkoutPage() {
                   value={quickSet.rpe}
                   onChange={(e) => setQuickSet({ ...quickSet, rpe: e.target.value })}
                   className="input-field w-full mt-1"
-                  placeholder="8"
-                  min="1"
+                  placeholder="опц."
+                  min="0"
                   max="10"
                   step="0.5"
                 />
