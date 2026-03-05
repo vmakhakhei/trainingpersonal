@@ -68,24 +68,6 @@
             "value": "max-age=63072000; includeSubDomains; preload"
           }
         ]
-      },
-      {
-        "source": "/(.*\\.(png|jpg|jpeg|webp|svg))",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=2592000, immutable"
-          }
-        ]
-      },
-      {
-        "source": "/(sw\\.js|manifest\\.json)",
-        "headers": [
-          {
-            "key": "Cache-Control",
-            "value": "public, max-age=3600"
-          }
-        ]
       }
     ]
   }
