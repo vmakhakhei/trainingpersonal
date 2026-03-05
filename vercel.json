@@ -9,14 +9,49 @@
       }
     },
     {
-      "src": "api/**/*.js",
+      "src": "api/ai/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/analytics/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/approaches/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/instructions/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/sets/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/workouts/*.js",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "src": "/api/ai/(proxy|tools)",
+      "dest": "/api/ai/$1.js"
+    },
+    {
+      "src": "/api/analytics/(exercise-progress|workout-summary)",
+      "dest": "/api/analytics/$1.js"
+    },
+    {
+      "src": "/api/(approaches|instructions|sets|workouts)$",
+      "dest": "/api/$1/index.js"
+    },
+    {
+      "src": "/api/(approaches|instructions|sets|workouts)/([^/]+)$",
+      "dest": "/api/$1/[id].js"
+    },
+    {
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
