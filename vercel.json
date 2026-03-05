@@ -1,0 +1,112 @@
+{
+    "version": 2,
+    "builds": [
+      {
+        "src": "package.json",
+        "use": "@vercel/static-build",
+        "config": {
+          "distDir": "dist"
+        }
+      },
+      {
+        "src": "api/**/*.js",
+        "use": "@vercel/node"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/api/(.*)",
+        "dest": "/api/$1"
+      },
+      {
+        "src": "/sw.js",
+        "dest": "/sw.js"
+      },
+      {
+        "src": "/manifest.json",
+        "dest": "/manifest.json"
+      },
+      {
+        "src": "/favicon\\.(ico|svg)",
+        "dest": "/favicon.$1"
+      },
+      {
+        "src": "/icon-(192|512)\\.png",
+        "dest": "/icon-$1.png"
+      },
+      {
+        "src": "/apple-touch-icon\\.png",
+        "dest": "/apple-touch-icon.png"
+      },
+      {
+        "src": "/(.*)",
+        "dest": "/index.html"
+      }
+    ],
+    "functions": {
+      "api/**/*.js": {
+        "memory": 512,
+        "maxDuration": 10
+      },
+      "api/ai/proxy.js": {
+        "memory": 1024,
+        "maxDuration": 30
+      }
+    },
+    "headers": [
+      {
+        "source": "/(.*)",
+        "headers": [
+          {
+            "key": "Content-Security-Policy",
+            "value": "default-src 'self'; connect-src 'self' https://*.supabase.co https://*.vercel.app; img-src 'self' data: blob: https://*.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:;"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "no-referrer"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Strict-Transport-Security",
+            "value": "max-age=63072000; includeSubDomains; preload"
+          }
+        ]
+      },
+      {
+        "source": "/(.*\\.(png|jpg|jpeg|webp|svg))",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=2592000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/(sw\\.js|manifest\\.json)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=3600"
+          }
+        ]
+      }
+    ],
+    "env": {
+      "VITE_SUPABASE_URL": "",
+      "VITE_SUPABASE_ANON_KEY": "",
+      "VITE_SINGLE_USER_ID": "",
+      "SUPABASE_SERVICE_ROLE_KEY": "",
+      "DEEPSEEK_API_KEY": "",
+      "DEEPSEEK_API_URL": "",
+      "VITE_AI_PROXY_URL": "",
+      "RATE_LIMIT_PER_HOUR": "",
+      "CACHE_TTL_HOURS": ""
+    }
+  }
