@@ -39,24 +39,7 @@
         "dest": "/api/$1"
       },
       {
-        "src": "/sw.js",
-        "dest": "/sw.js"
-      },
-      {
-        "src": "/manifest.json",
-        "dest": "/manifest.json"
-      },
-      {
-        "src": "/favicon\\.(ico|svg)",
-        "dest": "/favicon.$1"
-      },
-      {
-        "src": "/icon-(192|512)\\.png",
-        "dest": "/icon-$1.png"
-      },
-      {
-        "src": "/apple-touch-icon\\.png",
-        "dest": "/apple-touch-icon.png"
+        "handle": "filesystem"
       },
       {
         "src": "/(.*)",
