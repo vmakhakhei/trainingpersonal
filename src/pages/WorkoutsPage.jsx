@@ -1,7 +1,7 @@
 // file: src/pages/WorkoutsPage.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, TrendingUp, Trash2 } from 'lucide-react';
+import { Calendar, Trash2 } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';

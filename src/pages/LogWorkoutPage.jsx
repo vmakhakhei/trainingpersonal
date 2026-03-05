@@ -1,5 +1,5 @@
 // file: src/pages/LogWorkoutPage.jsx
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Save, X, Dumbbell } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';

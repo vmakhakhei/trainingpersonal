@@ -1,5 +1,5 @@
 // file: src/pages/AnalyticsPage.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TrendingUp, Dumbbell, Target } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';

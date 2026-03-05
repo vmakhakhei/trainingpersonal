@@ -2,14 +2,12 @@
 import crypto from 'crypto';
 import { supabaseAdmin } from '../_lib/supabase.js';
 import { getUserId, handleOptions } from '../_lib/auth.js';
-
-// Источник: rag_policy - ttl_hours: 72, citation_required: true
-const CACHE_TTL_HOURS = 72;
-const DEEPSEEK_API_URL = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/v1/chat/completions';
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
-
-// Rate limit: {"note":"Не подтверждено","verification":"low"} - используем базовое ограничение
-const RATE_LIMIT_PER_HOUR = 60;
+import {
+  CACHE_TTL_HOURS,
+  DEEPSEEK_API_KEY,
+  DEEPSEEK_API_URL,
+  RATE_LIMIT_PER_HOUR
+} from '../_lib/aiConfig.js';
 
 function generateCacheKey(prompt, context = {}) {
   const dataToHash = JSON.stringify({ prompt, context });

@@ -470,39 +470,39 @@ ALTER TABLE progress_photos ENABLE ROW LEVEL SECURITY;
 
 -- Profiles
 CREATE POLICY "profiles_single_user" ON profiles
-    FOR ALL USING (id = '16a037ff-7a35-43a0-8522-1e64c6163abf'::UUID);
+    FOR ALL USING (id::TEXT = 'YOUR_SUPABASE_USER_ID');
 
 -- Approaches
 CREATE POLICY "approaches_single_user" ON approaches
-    FOR ALL USING (user_id = '16a037ff-7a35-43a0-8522-1e64c6163abf'::UUID);
+    FOR ALL USING (user_id::TEXT = 'YOUR_SUPABASE_USER_ID');
 
 -- Instructions
 CREATE POLICY "instructions_single_user" ON instructions
-    FOR ALL USING (user_id = '16a037ff-7a35-43a0-8522-1e64c6163abf'::UUID);
+    FOR ALL USING (user_id::TEXT = 'YOUR_SUPABASE_USER_ID');
 
 -- Workout Plans
 CREATE POLICY "workout_plans_single_user" ON workout_plans
-    FOR ALL USING (user_id = '16a037ff-7a35-43a0-8522-1e64c6163abf'::UUID);
+    FOR ALL USING (user_id::TEXT = 'YOUR_SUPABASE_USER_ID');
 
 -- Workouts
 CREATE POLICY "workouts_single_user" ON workouts
-    FOR ALL USING (user_id = '16a037ff-7a35-43a0-8522-1e64c6163abf'::UUID);
+    FOR ALL USING (user_id::TEXT = 'YOUR_SUPABASE_USER_ID');
 
 -- Sets (доступ через workouts)
 CREATE POLICY "sets_single_user" ON sets
     FOR ALL USING (
         workout_id IN (
-            SELECT id FROM workouts WHERE user_id = '16a037ff-7a35-43a0-8522-1e64c6163abf'::UUID
+            SELECT id FROM workouts WHERE user_id::TEXT = 'YOUR_SUPABASE_USER_ID'
         )
     );
 
 -- Weight Logs
 CREATE POLICY "weight_logs_single_user" ON weight_logs
-    FOR ALL USING (user_id = '16a037ff-7a35-43a0-8522-1e64c6163abf'::UUID);
+    FOR ALL USING (user_id::TEXT = 'YOUR_SUPABASE_USER_ID');
 
 -- Progress Photos
 CREATE POLICY "progress_photos_single_user" ON progress_photos
-    FOR ALL USING (user_id = '16a037ff-7a35-43a0-8522-1e64c6163abf'::UUID);
+    FOR ALL USING (user_id::TEXT = 'YOUR_SUPABASE_USER_ID');
 
 -- Exercises (публичные для чтения)
 ALTER TABLE exercises ENABLE ROW LEVEL SECURITY;

@@ -1,6 +1,4 @@
 // file: src/pages/ExercisesPage.jsx
-import React from 'react';
-
 export default function ExercisesPage() {
   return (
     <div className="space-y-4">
