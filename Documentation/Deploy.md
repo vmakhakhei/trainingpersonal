@@ -247,6 +247,15 @@ curl -X POST https://your-app.vercel.app/api/tools \
     "tool":"getWorkoutHistory",
     "arguments":{"limit":10}
   }'
+
+# Analytics reads (materialized views)
+curl "https://your-app.vercel.app/api/analytics?op=workout_summary&limit=3"
+curl "https://your-app.vercel.app/api/analytics?op=exercise_progress&exercise_id=<uuid>&limit=5"
+curl "https://your-app.vercel.app/api/analytics?op=muscle_volume&from=2026-03-01&to=2026-03-31&muscle=chest"
+
+# Analytics refresh (protected)
+curl -X POST "https://your-app.vercel.app/api/analytics?op=refresh" \
+  -H "x-service-role: $SUPABASE_SERVICE_ROLE_KEY"
 ```
 
 ### 2. Проверить RLS
@@ -290,6 +299,18 @@ LIMIT 10;
 ---
 
 ## 📊 Monitoring & Maintenance
+
+### Analytics: how to schedule refresh
+
+Используйте внешний cron/scheduler (например GitHub Actions) и вызывайте refresh endpoint с секретным заголовком:
+
+```bash
+curl -X POST "https://your-app.vercel.app/api/analytics?op=refresh" \
+  -H "x-service-role: $SUPABASE_SERVICE_ROLE_KEY"
+```
+
+Рекомендуемая частота: раз в 6 часов (`0 */6 * * *`).
+Если `REFRESH CONCURRENTLY` недоступен, функция автоматически использует обычный `REFRESH` и пишет результат в `analytics_refresh_log`.
 
 ### Очистка expired cache (запускать еженедельно)
 ```sql

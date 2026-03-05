@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint src --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "test:node": "node --test tests/config/*.test.js tests/sql/*.test.js",
-    "test:vitest": "VITE_SUPABASE_URL=https://example.supabase.co SUPABASE_SERVICE_ROLE_KEY=test-service-role VITE_SINGLE_USER_ID=123e4567-e89b-42d3-a456-426614174000 vitest run tests/tools",
+    "test:vitest": "VITE_SUPABASE_URL=https://example.supabase.co SUPABASE_SERVICE_ROLE_KEY=test-service-role VITE_SINGLE_USER_ID=123e4567-e89b-42d3-a456-426614174000 vitest run tests/tools tests/analytics",
     "test": "npm run test:node && npm run test:vitest"
   },
   "dependencies": {

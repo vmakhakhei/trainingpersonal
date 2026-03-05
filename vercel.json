@@ -17,7 +17,7 @@
       "use": "@vercel/node"
     },
     {
-      "src": "api/analytics/*.js",
+      "src": "api/analytics/index.js",
       "use": "@vercel/node"
     },
     {
@@ -51,8 +51,8 @@
       "dest": "/api/ai/proxy.js"
     },
     {
-      "src": "/api/analytics/(exercise-progress|workout-summary)",
-      "dest": "/api/analytics/$1.js"
+      "src": "/api/analytics",
+      "dest": "/api/analytics/index.js"
     },
     {
       "src": "/api/(approaches|instructions|sets|workouts)$",
