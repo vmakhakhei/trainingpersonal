@@ -268,7 +268,14 @@ export default function LogWorkoutPage() {
       }
 
       try {
-        const summary = await requestSessionSummary({ workoutId: workout.id });
+        const summary = await requestSessionSummary({
+          workoutId: workout.id,
+          recentSets: sets.map((set) => ({
+            weight_kg: set.weight_kg,
+            reps: set.reps,
+            rpe: set.rpe
+          }))
+        });
         setSessionSummary(summary);
       } catch (summaryError) {
         console.error('Session summary error:', summaryError);
@@ -302,22 +309,16 @@ export default function LogWorkoutPage() {
     try {
       setCreatingPlan(true);
 
-      try {
+      const toolsApiUrl = import.meta.env.VITE_TOOLS_API_URL || '/api/tools';
+      const shouldUseLocalFallback = import.meta.env.DEV && toolsApiUrl.startsWith('/api/');
+
+      if (!shouldUseLocalFallback) {
         await callToolsApi({
           tool: 'createTrainingPlan',
-          arguments: planArguments
+          arguments: planArguments,
+          endpoint: toolsApiUrl
         });
-      } catch (apiError) {
-        const message = apiError?.message || '';
-        const shouldUseLocalFallback =
-          message.includes('Vite dev') ||
-          message.includes('пустой ответ') ||
-          message.includes('не-JSON');
-
-        if (!shouldUseLocalFallback) {
-          throw apiError;
-        }
-
+      } else {
         const { error: fallbackError } = await supabase
           .from('workout_plans')
           .insert({
