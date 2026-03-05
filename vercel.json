@@ -9,7 +9,27 @@
         }
       },
       {
-        "src": "api/**/*.js",
+        "src": "api/ai/proxy.js",
+        "use": "@vercel/node"
+      },
+      {
+        "src": "api/analytics/*.js",
+        "use": "@vercel/node"
+      },
+      {
+        "src": "api/approaches/*.js",
+        "use": "@vercel/node"
+      },
+      {
+        "src": "api/instructions/*.js",
+        "use": "@vercel/node"
+      },
+      {
+        "src": "api/sets/*.js",
+        "use": "@vercel/node"
+      },
+      {
+        "src": "api/workouts/*.js",
         "use": "@vercel/node"
       }
     ],
