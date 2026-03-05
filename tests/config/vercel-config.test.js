@@ -42,6 +42,7 @@ test('vercel.json has tools canonical route and alias', () => {
   const canonicalRoute = config.routes.find((route) => route.src === '/api/tools');
   const aliasRoute = config.routes.find((route) => route.src === '/api/ai/tools');
   const proxyRoute = config.routes.find((route) => route.src === '/api/ai/proxy');
+  const suggestRoute = config.routes.find((route) => route.src === '/api/ai/suggest');
   const analyticsRoute = config.routes.find((route) => route.src === '/api/analytics');
 
   assert.ok(canonicalRoute);
@@ -52,6 +53,9 @@ test('vercel.json has tools canonical route and alias', () => {
 
   assert.ok(proxyRoute);
   assert.equal(proxyRoute.dest, '/api/ai/proxy.js');
+
+  assert.ok(suggestRoute);
+  assert.equal(suggestRoute.dest, '/api/ai/suggest.js');
 
   assert.ok(analyticsRoute);
   assert.equal(analyticsRoute.dest, '/api/analytics/index.js');

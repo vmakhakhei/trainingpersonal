@@ -1,8 +1,14 @@
-// file: src/pages/LogWorkoutPage.jsx
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Save, X, Dumbbell } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
+import SuggestionPill from '../components/AI/SuggestionPill';
+import {
+  applyWeightChange,
+  formatWeightValue,
+  requestAutofillSuggestion,
+  requestSessionSummary
+} from '../lib/aiSuggest';
 
 export default function LogWorkoutPage() {
   const navigate = useNavigate();
@@ -12,6 +18,12 @@ export default function LogWorkoutPage() {
   const [sets, setSets] = useState([]);
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [finishingWorkout, setFinishingWorkout] = useState(false);
+  const [creatingPlan, setCreatingPlan] = useState(false);
+  const [autofillSuggestion, setAutofillSuggestion] = useState(null);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [sessionSummary, setSessionSummary] = useState(null);
 
   // Источник: ux_guidelines - минимизация кликов (≤3 для добавления подхода)
   const [quickSet, setQuickSet] = useState({
@@ -20,10 +32,76 @@ export default function LogWorkoutPage() {
     rpe: ''
   });
 
+  const selectedExerciseSets = useMemo(() => {
+    if (!selectedExercise?.id) {
+      return [];
+    }
+
+    return sets.filter((set) => set.exercise_id === selectedExercise.id);
+  }, [sets, selectedExercise?.id]);
+
+  const lastExerciseSet = selectedExerciseSets.length > 0
+    ? selectedExerciseSets[selectedExerciseSets.length - 1]
+    : null;
+
+  const canChangeWeight =
+    Number.isFinite(Number(quickSet.weight_kg)) ||
+    Number.isFinite(Number(lastExerciseSet?.weight_kg)) ||
+    Number.isFinite(Number(autofillSuggestion?.payload?.weight_kg));
+
   useEffect(() => {
     loadExercises();
     createWorkout();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAutofillSuggestion() {
+      if (!selectedExercise?.id || !workout?.id) {
+        setAutofillSuggestion(null);
+        return;
+      }
+
+      try {
+        setLoadingSuggestion(true);
+
+        const recentSets = sets
+          .filter((set) => set.exercise_id === selectedExercise.id)
+          .slice(-3)
+          .map((set) => ({
+            weight_kg: set.weight_kg,
+            reps: set.reps,
+            rpe: set.rpe
+          }));
+
+        const suggestion = await requestAutofillSuggestion({
+          exerciseId: selectedExercise.id,
+          workoutId: workout.id,
+          recentSets
+        });
+
+        if (!cancelled) {
+          setAutofillSuggestion(suggestion);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Autofill suggestion error:', error);
+          setAutofillSuggestion(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingSuggestion(false);
+        }
+      }
+    }
+
+    loadAutofillSuggestion();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExercise?.id, workout?.id, sets]);
 
   async function loadExercises() {
     // Источник: core_features.exercise_library
@@ -62,6 +140,53 @@ export default function LogWorkoutPage() {
     }
   }
 
+  function applySetToQuickForm(payload) {
+    if (!payload) {
+      return;
+    }
+
+    setQuickSet((prev) => ({
+      ...prev,
+      weight_kg:
+        payload.weight_kg === null || payload.weight_kg === undefined
+          ? prev.weight_kg
+          : formatWeightValue(payload.weight_kg),
+      reps:
+        payload.reps === null || payload.reps === undefined
+          ? prev.reps
+          : String(payload.reps),
+      rpe:
+        payload.rpe === null || payload.rpe === undefined
+          ? ''
+          : String(payload.rpe)
+    }));
+  }
+
+  function repeatLastSet() {
+    if (!lastExerciseSet) {
+      return;
+    }
+
+    applySetToQuickForm(lastExerciseSet);
+  }
+
+  function adjustWeight(multiplier) {
+    const nextWeight = applyWeightChange({
+      currentWeight: quickSet.weight_kg,
+      fallbackWeight: lastExerciseSet?.weight_kg ?? autofillSuggestion?.payload?.weight_kg,
+      multiplier
+    });
+
+    if (!nextWeight) {
+      return;
+    }
+
+    setQuickSet((prev) => ({
+      ...prev,
+      weight_kg: nextWeight
+    }));
+  }
+
   async function addSet() {
     if (!selectedExercise || !quickSet.weight_kg || !quickSet.reps) {
       alert('Заполните вес и повторения');
@@ -71,7 +196,7 @@ export default function LogWorkoutPage() {
     try {
       // Источник: CONSTRAINTS - reps>=1, weight>=0
       const weight = parseFloat(quickSet.weight_kg);
-      const reps = parseInt(quickSet.reps);
+      const reps = parseInt(quickSet.reps, 10);
       const rpe = quickSet.rpe ? parseFloat(quickSet.rpe) : null;
 
       if (weight < 0 || reps < 1) {
@@ -79,7 +204,7 @@ export default function LogWorkoutPage() {
         return;
       }
 
-      const nextOrder = sets.filter(s => s.exercise_id === selectedExercise.id).length + 1;
+      const nextOrder = selectedExerciseSets.length + 1;
 
       const { data, error } = await supabase
         .from('sets')
@@ -88,33 +213,121 @@ export default function LogWorkoutPage() {
           exercise_id: selectedExercise.id,
           set_order: nextOrder,
           weight_kg: weight,
-          reps: reps,
-          rpe: rpe
+          reps,
+          rpe
         })
-        .select('*, exercises(name_ru)')
+        .select('*, exercises(name_ru, primary_muscle)')
         .single();
 
       if (error) throw error;
 
-      setSets([...sets, data]);
-      setQuickSet({ weight_kg: quickSet.weight_kg, reps: '', rpe: '' });
+      setSets((prev) => [...prev, data]);
+      setAutofillSuggestion({
+        id: 's-local',
+        type: 'autofill',
+        payload: {
+          weight_kg: data.weight_kg,
+          reps: data.reps,
+          rpe: data.rpe
+        },
+        confidence: 0.9,
+        explain: `последний подход был ${data.weight_kg}×${data.reps}`,
+        sources: []
+      });
+      setQuickSet((prev) => ({ ...prev, reps: '' }));
     } catch (error) {
       console.error('Error adding set:', error);
       alert('Ошибка добавления подхода');
     }
   }
 
+  function fallbackSessionSummary() {
+    return {
+      summary: 'Тренировка завершена',
+      highlights: [`Подходов: ${sets.length}`],
+      suggestions: ['Продолжайте фиксировать рабочие подходы для более точных рекомендаций']
+    };
+  }
+
   async function finishWorkout() {
+    if (!workout?.id || finishingWorkout) {
+      return;
+    }
+
     try {
-      await supabase
+      setFinishingWorkout(true);
+
+      const { error } = await supabase
         .from('workouts')
         .update({ end_time: new Date().toISOString() })
         .eq('id', workout.id);
 
-      navigate(`/workouts/${workout.id}`);
+      if (error) {
+        throw error;
+      }
+
+      try {
+        const summary = await requestSessionSummary({ workoutId: workout.id });
+        setSessionSummary(summary);
+      } catch (summaryError) {
+        console.error('Session summary error:', summaryError);
+        setSessionSummary(fallbackSessionSummary());
+      }
+
+      setShowSummaryModal(true);
     } catch (error) {
       console.error('Error finishing workout:', error);
+      alert('Ошибка завершения тренировки');
+    } finally {
+      setFinishingWorkout(false);
     }
+  }
+
+  async function generateTrainingPlan() {
+    if (creatingPlan) {
+      return;
+    }
+
+    try {
+      setCreatingPlan(true);
+
+      const response = await fetch('/api/tools', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tool: 'createTrainingPlan',
+          arguments: {
+            name: `AI План ${new Date().toLocaleDateString('ru-RU')}`,
+            description:
+              sessionSummary?.summary ||
+              'План создан на основе завершенной тренировки и AI session summary',
+            goal: 'strength',
+            days_per_week: 3,
+            duration_weeks: 8
+          }
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || 'Не удалось создать план');
+      }
+
+      alert('План успешно создан');
+    } catch (error) {
+      console.error('Create plan error:', error);
+      alert(`Ошибка создания плана: ${error.message}`);
+    } finally {
+      setCreatingPlan(false);
+    }
+  }
+
+  function goToWorkoutDetails() {
+    setShowSummaryModal(false);
+    navigate(`/workouts/${workout.id}`);
   }
 
   if (loading || !workout) {
@@ -133,10 +346,11 @@ export default function LogWorkoutPage() {
           <h1 className="text-xl font-bold">Новая тренировка</h1>
           <button
             onClick={finishWorkout}
+            disabled={finishingWorkout}
             className="btn-primary flex items-center space-x-2"
           >
             <Save className="w-5 h-5" />
-            <span>Завершить</span>
+            <span>{finishingWorkout ? 'Завершение...' : 'Завершить'}</span>
           </button>
         </div>
       </div>
@@ -173,16 +387,54 @@ export default function LogWorkoutPage() {
             </div>
           </div>
 
-          {/* Quick Set Input - Источник: ux_guidelines - ≤3 клика */}
+          {/* Quick Set Input */}
           <div className="card">
             <div className="text-sm font-medium mb-3">Быстрое добавление подхода</div>
+
+            <div className="space-y-2 mb-3">
+              {loadingSuggestion && (
+                <div className="text-xs text-dark-muted">AI подбирает smart autofill...</div>
+              )}
+
+              {!loadingSuggestion && autofillSuggestion && (
+                <SuggestionPill suggestion={autofillSuggestion} onApply={applySetToQuickForm} />
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-3">
+              <button
+                type="button"
+                onClick={repeatLastSet}
+                disabled={!lastExerciseSet}
+                className="btn-secondary text-sm px-3 py-2"
+              >
+                Повторить
+              </button>
+              <button
+                type="button"
+                onClick={() => adjustWeight(1.05)}
+                disabled={!canChangeWeight}
+                className="btn-secondary text-sm px-3 py-2"
+              >
+                +5%
+              </button>
+              <button
+                type="button"
+                onClick={() => adjustWeight(0.95)}
+                disabled={!canChangeWeight}
+                className="btn-secondary text-sm px-3 py-2"
+              >
+                -5%
+              </button>
+            </div>
+
             <div className="grid grid-cols-3 gap-3 mb-3">
               <div>
                 <label className="text-xs text-dark-muted">Вес (кг)</label>
                 <input
                   type="number"
                   value={quickSet.weight_kg}
-                  onChange={(e) => setQuickSet({...quickSet, weight_kg: e.target.value})}
+                  onChange={(e) => setQuickSet({ ...quickSet, weight_kg: e.target.value })}
                   className="input-field w-full mt-1"
                   placeholder="100"
                   step="0.5"
@@ -194,7 +446,7 @@ export default function LogWorkoutPage() {
                 <input
                   type="number"
                   value={quickSet.reps}
-                  onChange={(e) => setQuickSet({...quickSet, reps: e.target.value})}
+                  onChange={(e) => setQuickSet({ ...quickSet, reps: e.target.value })}
                   className="input-field w-full mt-1"
                   placeholder="10"
                   min="1"
@@ -205,7 +457,7 @@ export default function LogWorkoutPage() {
                 <input
                   type="number"
                   value={quickSet.rpe}
-                  onChange={(e) => setQuickSet({...quickSet, rpe: e.target.value})}
+                  onChange={(e) => setQuickSet({ ...quickSet, rpe: e.target.value })}
                   className="input-field w-full mt-1"
                   placeholder="8"
                   min="1"
@@ -222,7 +474,7 @@ export default function LogWorkoutPage() {
 
           {/* Sets List */}
           <div className="space-y-2">
-            {sets.filter(s => s.exercise_id === selectedExercise.id).map((set, idx) => (
+            {selectedExerciseSets.map((set, idx) => (
               <div key={set.id} className="card flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <div className="text-dark-muted font-mono">#{idx + 1}</div>
@@ -248,19 +500,74 @@ export default function LogWorkoutPage() {
               </button>
             </div>
             <div className="overflow-y-auto max-h-[60vh] p-4 space-y-2">
-              {exercises.map(ex => (
+              {exercises.map((exercise) => (
                 <button
-                  key={ex.id}
+                  key={exercise.id}
                   onClick={() => {
-                    setSelectedExercise(ex);
+                    setSelectedExercise(exercise);
+                    setAutofillSuggestion(null);
                     setShowExercisePicker(false);
                   }}
                   className="w-full card hover:bg-dark-elevated transition-colors text-left"
                 >
-                  <div className="font-medium">{ex.name_ru}</div>
-                  <div className="text-sm text-dark-muted">{ex.primary_muscle}</div>
+                  <div className="font-medium">{exercise.name_ru}</div>
+                  <div className="text-sm text-dark-muted">{exercise.primary_muscle}</div>
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSummaryModal && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center">
+          <div className="bg-dark-surface w-full sm:max-w-xl sm:rounded-xl border border-dark-border overflow-hidden">
+            <div className="p-4 border-b border-dark-border">
+              <h2 className="text-lg font-semibold">🏋️ Итог тренировки</h2>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <p className="text-sm">{sessionSummary?.summary || 'Тренировка завершена'}</p>
+
+              {Array.isArray(sessionSummary?.highlights) && sessionSummary.highlights.length > 0 && (
+                <div>
+                  <div className="text-sm font-medium mb-2">Highlights</div>
+                  <div className="space-y-1">
+                    {sessionSummary.highlights.map((item, idx) => (
+                      <div key={`${item}-${idx}`} className="text-sm text-dark-muted">
+                        • {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {Array.isArray(sessionSummary?.suggestions) && sessionSummary.suggestions.length > 0 && (
+                <div>
+                  <div className="text-sm font-medium mb-2">Рекомендации</div>
+                  <div className="space-y-1">
+                    {sessionSummary.suggestions.map((item, idx) => (
+                      <div key={`${item}-${idx}`} className="text-sm text-dark-muted">
+                        • {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={generateTrainingPlan}
+                  disabled={creatingPlan}
+                  className="btn-primary flex-1"
+                >
+                  {creatingPlan ? 'Генерация...' : 'Сгенерировать план'}
+                </button>
+                <button type="button" onClick={goToWorkoutDetails} className="btn-secondary flex-1">
+                  К деталям
+                </button>
+              </div>
             </div>
           </div>
         </div>
