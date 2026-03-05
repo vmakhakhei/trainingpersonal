@@ -1,6 +1,6 @@
 // file: src/pages/ApproachesPage.jsx
-import React, { useEffect, useState } from 'react';
-import { Plus, BookOpen, Edit2, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, BookOpen, Trash2 } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 import { APPROACH_TYPES } from '../lib/constants';
 

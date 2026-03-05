@@ -1,5 +1,5 @@
 // file: src/pages/DashboardPage.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, TrendingUp, Dumbbell, Calendar } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';

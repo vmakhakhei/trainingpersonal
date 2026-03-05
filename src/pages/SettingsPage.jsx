@@ -1,9 +1,9 @@
 // file: src/pages/SettingsPage.jsx
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
-import { supabase, SINGLE_USER_ID } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -16,11 +16,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    loadSettings();
-  }, [user]);
-
-  async function loadSettings() {
+  const loadSettings = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -45,7 +41,11 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
+
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   async function saveSettings() {
     try {

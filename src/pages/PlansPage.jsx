@@ -1,5 +1,5 @@
 // file: src/pages/PlansPage.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Calendar, Dumbbell } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 

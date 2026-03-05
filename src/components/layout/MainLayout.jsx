@@ -1,5 +1,4 @@
 // file: src/components/layout/MainLayout.jsx
-import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { Home, Dumbbell, TrendingUp, BookOpen, Brain, User } from 'lucide-react';
 

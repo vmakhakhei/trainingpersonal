@@ -18,6 +18,7 @@ cp .env.example .env
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_SINGLE_USER_ID` (после регистрации)
+- `VITE_AI_PROXY_URL` (`https://your-app.vercel.app/api/ai/proxy`)
 
 ### 3. Импорт SQL схемы
 
@@ -56,6 +57,8 @@ vercel env add VITE_SUPABASE_ANON_KEY
 vercel env add VITE_SINGLE_USER_ID
 vercel env add SUPABASE_SERVICE_ROLE_KEY
 vercel env add DEEPSEEK_API_KEY
+vercel env add RATE_LIMIT_PER_HOUR
+vercel env add CACHE_TTL_HOURS
 
 # Production deploy:
 vercel --prod
@@ -72,6 +75,11 @@ curl https://your-app.vercel.app/api/workouts
 curl -X POST https://your-app.vercel.app/api/ai/proxy \
   -H "Content-Type: application/json" \
   -d '{"prompt":"Как делать приседания?"}'
+
+# AI Tools (MVP)
+curl -X POST https://your-app.vercel.app/api/tools \
+  -H "Content-Type: application/json" \
+  -d '{"tool":"getWorkoutHistory","arguments":{"limit":5}}'
 ```
 
 ### Ручные тесты

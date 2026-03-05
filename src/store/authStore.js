@@ -1,6 +1,6 @@
 // file: src/store/authStore.js
 import { create } from 'zustand';
-import { supabase, SINGLE_USER_ID, validateSingleUserId } from '../lib/supabase';
+import { supabase, validateSingleUserId } from '../lib/supabase';
 
 function formatAuthError(error) {
   const message = error?.message || 'Ошибка авторизации';

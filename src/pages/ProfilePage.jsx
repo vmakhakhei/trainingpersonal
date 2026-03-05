@@ -1,5 +1,5 @@
 // file: src/pages/ProfilePage.jsx
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { User, Settings, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
@@ -11,11 +11,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadProfile();
-  }, [user]);
-
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -33,7 +29,11 @@ export default function ProfilePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
 
   async function handleSignOut() {
     if (confirm('Выйти из аккаунта?')) {

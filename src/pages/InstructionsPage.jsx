@@ -1,5 +1,5 @@
 // file: src/pages/InstructionsPage.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, FileText, Trash2 } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 import { INSTRUCTION_TYPES } from '../lib/constants';

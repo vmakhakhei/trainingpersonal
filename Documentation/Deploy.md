@@ -43,7 +43,7 @@ cp .env.example .env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your_anon_key
 VITE_SINGLE_USER_ID=YOUR_SUPABASE_USER_ID  # Установите ПОСЛЕ регистрации
-VITE_AI_PROXY_URL=http://localhost:3000/api/ai  # Для локальной разработки
+VITE_AI_PROXY_URL=http://localhost:3000/api/ai/proxy  # Для локальной разработки
 ```
 
 ### 4. Запустить локально
@@ -168,7 +168,7 @@ vercel
 VITE_SUPABASE_URL = https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY = your_anon_key
 VITE_SINGLE_USER_ID = ваш-реальный-uuid
-VITE_AI_PROXY_URL = https://your-app.vercel.app/api/ai
+VITE_AI_PROXY_URL = https://your-app.vercel.app/api/ai/proxy
 
 # Serverless API Variables:
 SUPABASE_SERVICE_ROLE_KEY = your_service_role_key
@@ -185,6 +185,8 @@ vercel env add VITE_SUPABASE_ANON_KEY
 vercel env add VITE_SINGLE_USER_ID
 vercel env add SUPABASE_SERVICE_ROLE_KEY
 vercel env add DEEPSEEK_API_KEY
+vercel env add RATE_LIMIT_PER_HOUR
+vercel env add CACHE_TTL_HOURS
 ```
 
 ### 4. Повторный деплой
@@ -236,6 +238,14 @@ curl -X POST https://your-app.vercel.app/api/ai/proxy \
   -d '{
     "prompt":"Как правильно делать приседания?",
     "context":{}
+  }'
+
+# AI tools layer (MVP)
+curl -X POST https://your-app.vercel.app/api/tools \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tool":"getWorkoutHistory",
+    "arguments":{"limit":10}
   }'
 ```
 

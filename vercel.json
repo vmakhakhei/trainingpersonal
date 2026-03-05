@@ -1,76 +1,103 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "package.json",
-        "use": "@vercel/static-build",
-        "config": {
-          "distDir": "dist"
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    },
+    {
+      "src": "api/ai/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/tools.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/analytics/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/approaches/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/instructions/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/sets/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/workouts/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/tools",
+      "dest": "/api/tools.js"
+    },
+    {
+      "src": "/api/ai/tools",
+      "dest": "/api/tools.js"
+    },
+    {
+      "src": "/api/ai/proxy",
+      "dest": "/api/ai/proxy.js"
+    },
+    {
+      "src": "/api/analytics/(exercise-progress|workout-summary)",
+      "dest": "/api/analytics/$1.js"
+    },
+    {
+      "src": "/api/(approaches|instructions|sets|workouts)$",
+      "dest": "/api/$1/index.js"
+    },
+    {
+      "src": "/api/(approaches|instructions|sets|workouts)/([^/]+)$",
+      "dest": "/api/$1/[id].js"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; connect-src 'self' https://*.supabase.co https://*.vercel.app; img-src 'self' data: blob: https://*.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:;"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains; preload"
         }
-      },
-      {
-        "src": "api/ai/proxy.js",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "api/analytics/*.js",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "api/approaches/*.js",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "api/instructions/*.js",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "api/sets/*.js",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "api/workouts/*.js",
-        "use": "@vercel/node"
-      }
-    ],
-    "routes": [
-      {
-        "src": "/api/(.*)",
-        "dest": "/api/$1"
-      },
-      {
-        "handle": "filesystem"
-      },
-      {
-        "src": "/(.*)",
-        "dest": "/index.html"
-      }
-    ],
-    "headers": [
-      {
-        "source": "/(.*)",
-        "headers": [
-          {
-            "key": "Content-Security-Policy",
-            "value": "default-src 'self'; connect-src 'self' https://*.supabase.co https://*.vercel.app; img-src 'self' data: blob: https://*.supabase.co; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:;"
-          },
-          {
-            "key": "Referrer-Policy",
-            "value": "no-referrer"
-          },
-          {
-            "key": "X-Frame-Options",
-            "value": "DENY"
-          },
-          {
-            "key": "X-Content-Type-Options",
-            "value": "nosniff"
-          },
-          {
-            "key": "Strict-Transport-Security",
-            "value": "max-age=63072000; includeSubDomains; preload"
-          }
-        ]
-      }
-    ]
+      ]
+    }
+  ],
+  "env": {
+    "VITE_ENV": "production"
   }
+}

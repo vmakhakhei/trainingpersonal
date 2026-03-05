@@ -1,5 +1,5 @@
 // file: src/pages/LoginPage.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
 
 export default function LoginPage() {
