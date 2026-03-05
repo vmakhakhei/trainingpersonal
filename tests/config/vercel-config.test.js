@@ -22,27 +22,37 @@ test('vercel.json has expected build targets', () => {
   );
 
   assert.ok(
-    config.builds.some(
-      (build) => build.src === 'api/**/*.js' && build.use === '@vercel/node'
-    )
+    config.builds.some((build) => build.src === 'api/tools.js' && build.use === '@vercel/node')
+  );
+
+  assert.ok(
+    config.builds.some((build) => build.src === 'api/ai/*.js' && build.use === '@vercel/node')
   );
 });
 
-test('vercel.json forwards /api routes and keeps SPA fallback', () => {
+test('vercel.json has tools canonical route and alias', () => {
   const config = getConfig();
 
-  const apiRoute = config.routes.find((route) => route.src === '/api/(.*)');
-  const spaFallbackRoute = config.routes.find((route) => route.src === '/(.*)');
+  const canonicalRoute = config.routes.find((route) => route.src === '/api/tools');
+  const aliasRoute = config.routes.find((route) => route.src === '/api/ai/tools');
+  const proxyRoute = config.routes.find((route) => route.src === '/api/ai/proxy');
 
-  assert.ok(apiRoute);
-  assert.equal(apiRoute.dest, '/api/$1');
+  assert.ok(canonicalRoute);
+  assert.equal(canonicalRoute.dest, '/api/tools.js');
 
-  assert.ok(spaFallbackRoute);
-  assert.equal(spaFallbackRoute.dest, '/index.html');
+  assert.ok(aliasRoute);
+  assert.equal(aliasRoute.dest, '/api/tools.js');
+
+  assert.ok(proxyRoute);
+  assert.equal(proxyRoute.dest, '/api/ai/proxy.js');
 });
 
-test('vercel.json keeps security headers', () => {
+test('vercel.json keeps SPA fallback and security headers', () => {
   const config = getConfig();
+
+  const spaFallbackRoute = config.routes.find((route) => route.src === '/(.*)');
+  assert.ok(spaFallbackRoute);
+  assert.equal(spaFallbackRoute.dest, '/index.html');
 
   assert.ok(Array.isArray(config.headers));
   const globalHeaders = config.headers.find((item) => item.source === '/(.*)');

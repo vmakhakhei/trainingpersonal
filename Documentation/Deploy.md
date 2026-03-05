@@ -241,10 +241,10 @@ curl -X POST https://your-app.vercel.app/api/ai/proxy \
   }'
 
 # AI tools layer (MVP)
-curl -X POST https://your-app.vercel.app/api/ai/tools \
+curl -X POST https://your-app.vercel.app/api/tools \
   -H "Content-Type: application/json" \
   -d '{
-    "tool":"list_recent_workouts",
+    "tool":"getWorkoutHistory",
     "arguments":{"limit":10}
   }'
 ```

@@ -77,9 +77,9 @@ curl -X POST https://your-app.vercel.app/api/ai/proxy \
   -d '{"prompt":"Как делать приседания?"}'
 
 # AI Tools (MVP)
-curl -X POST https://your-app.vercel.app/api/ai/tools \
+curl -X POST https://your-app.vercel.app/api/tools \
   -H "Content-Type: application/json" \
-  -d '{"tool":"get_workout_summary","arguments":{"limit":5}}'
+  -d '{"tool":"getWorkoutHistory","arguments":{"limit":5}}'
 ```
 
 ### Ручные тесты

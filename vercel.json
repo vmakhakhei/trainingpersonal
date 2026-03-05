@@ -13,6 +13,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/tools.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "api/analytics/*.js",
       "use": "@vercel/node"
     },
@@ -35,8 +39,16 @@
   ],
   "routes": [
     {
-      "src": "/api/ai/(proxy|tools)",
-      "dest": "/api/ai/$1.js"
+      "src": "/api/tools",
+      "dest": "/api/tools.js"
+    },
+    {
+      "src": "/api/ai/tools",
+      "dest": "/api/tools.js"
+    },
+    {
+      "src": "/api/ai/proxy",
+      "dest": "/api/ai/proxy.js"
     },
     {
       "src": "/api/analytics/(exercise-progress|workout-summary)",
