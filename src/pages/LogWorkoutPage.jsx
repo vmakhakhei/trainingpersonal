@@ -9,6 +9,7 @@ import {
   requestAutofillSuggestion,
   requestSessionSummary
 } from '../lib/aiSuggest';
+import { callToolsApi } from '../lib/toolsClient';
 
 export default function LogWorkoutPage() {
   const navigate = useNavigate();
@@ -288,32 +289,51 @@ export default function LogWorkoutPage() {
       return;
     }
 
+    const planArguments = {
+      name: `AI План ${new Date().toLocaleDateString('ru-RU')}`,
+      description:
+        sessionSummary?.summary ||
+        'План создан на основе завершенной тренировки и AI session summary',
+      goal: 'strength',
+      days_per_week: 3,
+      duration_weeks: 8
+    };
+
     try {
       setCreatingPlan(true);
 
-      const response = await fetch('/api/tools', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      try {
+        await callToolsApi({
           tool: 'createTrainingPlan',
-          arguments: {
-            name: `AI План ${new Date().toLocaleDateString('ru-RU')}`,
-            description:
-              sessionSummary?.summary ||
-              'План создан на основе завершенной тренировки и AI session summary',
-            goal: 'strength',
-            days_per_week: 3,
-            duration_weeks: 8
-          }
-        })
-      });
+          arguments: planArguments
+        });
+      } catch (apiError) {
+        const message = apiError?.message || '';
+        const shouldUseLocalFallback =
+          message.includes('Vite dev') ||
+          message.includes('пустой ответ') ||
+          message.includes('не-JSON');
 
-      const data = await response.json();
+        if (!shouldUseLocalFallback) {
+          throw apiError;
+        }
 
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.error || 'Не удалось создать план');
+        const { error: fallbackError } = await supabase
+          .from('workout_plans')
+          .insert({
+            user_id: SINGLE_USER_ID,
+            name: planArguments.name,
+            description: planArguments.description,
+            goal: planArguments.goal,
+            days_per_week: planArguments.days_per_week,
+            duration_weeks: planArguments.duration_weeks
+          })
+          .select('id')
+          .single();
+
+        if (fallbackError) {
+          throw fallbackError;
+        }
       }
 
       alert('План успешно создан');

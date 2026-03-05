@@ -31,6 +31,7 @@ test('.env.example includes required variables and safe placeholders', () => {
     'VITE_SUPABASE_ANON_KEY',
     'VITE_SINGLE_USER_ID',
     'VITE_AI_PROXY_URL',
+    'VITE_TOOLS_API_URL',
     'SUPABASE_SERVICE_ROLE_KEY',
     'DEEPSEEK_API_KEY'
   ];
@@ -41,6 +42,7 @@ test('.env.example includes required variables and safe placeholders', () => {
 
   assert.equal(env.VITE_SINGLE_USER_ID, 'YOUR_SUPABASE_USER_ID');
   assert.equal(env.VITE_AI_PROXY_URL, 'https://your-app.vercel.app/api/ai/proxy');
+  assert.equal(env.VITE_TOOLS_API_URL, 'https://your-app.vercel.app/api/tools');
 
   assert.ok(!content.includes('16a037ff-7a35-43a0-8522-1e64c6163abf'));
   assert.ok(!content.includes('aiuwlvrvcsmwlrbajksy'));
