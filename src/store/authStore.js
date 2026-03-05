@@ -2,6 +2,19 @@
 import { create } from 'zustand';
 import { supabase, SINGLE_USER_ID, validateSingleUserId } from '../lib/supabase';
 
+function formatAuthError(error) {
+  const message = error?.message || 'Ошибка авторизации';
+  const isInvalidCredentials =
+    error?.code === 'invalid_credentials' ||
+    /invalid login credentials/i.test(message);
+
+  if (isInvalidCredentials) {
+    return 'Неверный email или пароль. Если пароль точно верный, проверьте что пользователь есть в этом Supabase проекте и подтвержден по email.';
+  }
+
+  return message;
+}
+
 export const useAuthStore = create((set, get) => ({
   user: undefined,
   loading: false,
@@ -39,9 +52,12 @@ export const useAuthStore = create((set, get) => ({
   signIn: async (email, password) => {
     set({ loading: true, error: null });
     try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedPassword = password.replace(/\r?\n/g, '');
+
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
+        email: normalizedEmail,
+        password: normalizedPassword
       });
       
       if (error) throw error;
@@ -54,8 +70,9 @@ export const useAuthStore = create((set, get) => ({
       
       return { success: true, user: data.user };
     } catch (error) {
-      set({ error: error.message, loading: false });
-      return { success: false, error: error.message };
+      const formattedError = formatAuthError(error);
+      set({ error: formattedError, loading: false });
+      return { success: false, error: formattedError };
     }
   },
 

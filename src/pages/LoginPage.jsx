@@ -33,6 +33,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input-field w-full"
+                autoComplete="email"
                 required
               />
             </div>
@@ -44,6 +45,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field w-full"
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 required
                 minLength={6}
               />
