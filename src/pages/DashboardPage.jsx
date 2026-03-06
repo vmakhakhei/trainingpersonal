@@ -1,10 +1,30 @@
-// file: src/pages/DashboardPage.jsx
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, TrendingUp, Dumbbell, Calendar } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
+
+function buildWorkoutStats(sets = []) {
+  const stats = new Map();
+
+  for (const set of sets) {
+    const workoutId = set.workout_id;
+    if (!workoutId) continue;
+
+    const prev = stats.get(workoutId) || { set_count: 0, volume_kg: 0 };
+    const weight = Number(set.weight_kg) || 0;
+    const reps = Number(set.reps) || 0;
+    const isWarmup = Boolean(set.is_warmup);
+
+    stats.set(workoutId, {
+      set_count: prev.set_count + 1,
+      volume_kg: prev.volume_kg + (isWarmup ? 0 : weight * reps)
+    });
+  }
+
+  return stats;
+}
 
 export default function DashboardPage() {
   const [recentWorkouts, setRecentWorkouts] = useState([]);
@@ -23,37 +43,62 @@ export default function DashboardPage() {
     try {
       setLoading(true);
 
-      // Источник: competitors - Strong, Hevy (dashboard with recent workouts)
-      const { data: workouts, error } = await supabase
+      const { data: workoutRows, error: workoutsError } = await supabase
         .from('workouts')
-        .select('*, sets(count)')
+        .select('id, workout_date, total_volume_kg, created_at')
         .eq('user_id', SINGLE_USER_ID)
         .eq('is_deleted', false)
-        .order('workout_date', { ascending: false })
-        .limit(5);
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (workoutsError) throw workoutsError;
 
-      setRecentWorkouts(workouts || []);
+      const workoutIds = (workoutRows || []).map((item) => item.id);
+      let statsByWorkout = new Map();
 
-      // Calculate stats
+      if (workoutIds.length > 0) {
+        const { data: setRows, error: setsError } = await supabase
+          .from('sets')
+          .select('workout_id, weight_kg, reps, is_warmup')
+          .in('workout_id', workoutIds)
+          .eq('is_deleted', false);
+
+        if (setsError) throw setsError;
+
+        statsByWorkout = buildWorkoutStats(setRows || []);
+      }
+
+      const completedWorkouts = (workoutRows || [])
+        .map((workout) => {
+          const summary = statsByWorkout.get(workout.id) || { set_count: 0, volume_kg: 0 };
+          const fallbackVolume = Number(workout.total_volume_kg) || 0;
+
+          return {
+            ...workout,
+            set_count: summary.set_count,
+            display_volume_kg: summary.volume_kg > 0 ? summary.volume_kg : fallbackVolume
+          };
+        })
+        .filter((workout) => workout.set_count > 0);
+
+      setRecentWorkouts(completedWorkouts.slice(0, 5));
+
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
 
-      const thisWeek = workouts?.filter(
-        w => new Date(w.workout_date) >= weekAgo
-      ).length || 0;
+      const thisWeek = completedWorkouts.filter(
+        (workout) => new Date(workout.workout_date) >= weekAgo
+      ).length;
 
-      const totalVol = workouts?.reduce(
-        (sum, w) => sum + (parseFloat(w.total_volume_kg) || 0), 0
-      ) || 0;
+      const totalVol = completedWorkouts.reduce(
+        (sum, workout) => sum + (Number(workout.display_volume_kg) || 0),
+        0
+      );
 
       setStats({
-        totalWorkouts: workouts?.length || 0,
+        totalWorkouts: completedWorkouts.length,
         thisWeekWorkouts: thisWeek,
         totalVolume: totalVol
       });
-
     } catch (error) {
       console.error('Error loading dashboard:', error);
     } finally {
@@ -77,9 +122,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-dark-muted mt-1">
-          {format(new Date(), 'EEEE, d MMMM', { locale: ru })}
-        </p>
+        <p className="text-dark-muted mt-1">{format(new Date(), 'EEEE, d MMMM', { locale: ru })}</p>
       </div>
 
       {/* Quick Actions - Источник: ux_guidelines - минимизация кликов */}
@@ -149,7 +192,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {recentWorkouts.map(workout => (
+            {recentWorkouts.map((workout) => (
               <Link
                 key={workout.id}
                 to={`/workouts/${workout.id}`}
@@ -164,13 +207,13 @@ export default function DashboardPage() {
                       <div className="font-medium">
                         {format(new Date(workout.workout_date), 'd MMMM', { locale: ru })}
                       </div>
-                      <div className="text-sm text-dark-muted">
-                        {workout.sets?.[0]?.count || 0} подходов
-                      </div>
+                      <div className="text-sm text-dark-muted">{workout.set_count} подходов</div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold">{Math.round(workout.total_volume_kg || 0)} кг</div>
+                    <div className="font-semibold">
+                      {Math.round(workout.display_volume_kg || 0)} кг
+                    </div>
                     <div className="text-xs text-dark-muted">объём</div>
                   </div>
                 </div>

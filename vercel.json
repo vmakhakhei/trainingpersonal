@@ -51,6 +51,10 @@
       "dest": "/api/ai/proxy.js"
     },
     {
+      "src": "/api/ai/suggest",
+      "dest": "/api/ai/suggest.js"
+    },
+    {
       "src": "/api/analytics",
       "dest": "/api/analytics/index.js"
     },

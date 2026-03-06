@@ -1,10 +1,30 @@
-// file: src/pages/WorkoutsPage.jsx
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Trash2 } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
+
+function buildWorkoutStats(sets = []) {
+  const stats = new Map();
+
+  for (const set of sets) {
+    const workoutId = set.workout_id;
+    if (!workoutId) continue;
+
+    const prev = stats.get(workoutId) || { set_count: 0, volume_kg: 0 };
+    const weight = Number(set.weight_kg) || 0;
+    const reps = Number(set.reps) || 0;
+    const isWarmup = Boolean(set.is_warmup);
+
+    stats.set(workoutId, {
+      set_count: prev.set_count + 1,
+      volume_kg: prev.volume_kg + (isWarmup ? 0 : weight * reps)
+    });
+  }
+
+  return stats;
+}
 
 export default function WorkoutsPage() {
   const [workouts, setWorkouts] = useState([]);
@@ -17,16 +37,45 @@ export default function WorkoutsPage() {
   async function loadWorkouts() {
     try {
       setLoading(true);
-      // Источник: competitors - Strong, Hevy (workout history)
-      const { data, error } = await supabase
+
+      const { data: workoutRows, error: workoutsError } = await supabase
         .from('workouts')
-        .select('*, sets(count)')
+        .select('id, workout_date, total_volume_kg, created_at')
         .eq('user_id', SINGLE_USER_ID)
         .eq('is_deleted', false)
-        .order('workout_date', { ascending: false });
+        .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setWorkouts(data || []);
+      if (workoutsError) throw workoutsError;
+
+      const workoutIds = (workoutRows || []).map((item) => item.id);
+      let statsByWorkout = new Map();
+
+      if (workoutIds.length > 0) {
+        const { data: setRows, error: setsError } = await supabase
+          .from('sets')
+          .select('workout_id, weight_kg, reps, is_warmup')
+          .in('workout_id', workoutIds)
+          .eq('is_deleted', false);
+
+        if (setsError) throw setsError;
+
+        statsByWorkout = buildWorkoutStats(setRows || []);
+      }
+
+      const enriched = (workoutRows || [])
+        .map((workout) => {
+          const stats = statsByWorkout.get(workout.id) || { set_count: 0, volume_kg: 0 };
+          const fallbackVolume = Number(workout.total_volume_kg) || 0;
+
+          return {
+            ...workout,
+            set_count: stats.set_count,
+            display_volume_kg: stats.volume_kg > 0 ? stats.volume_kg : fallbackVolume
+          };
+        })
+        .filter((workout) => workout.set_count > 0);
+
+      setWorkouts(enriched);
     } catch (error) {
       console.error('Error loading workouts:', error);
     } finally {
@@ -60,7 +109,7 @@ export default function WorkoutsPage() {
     return (
       <div className="p-4">
         <div className="animate-pulse space-y-3">
-          {[1,2,3].map(i => (
+          {[1, 2, 3].map((i) => (
             <div key={i} className="h-24 bg-dark-surface rounded-xl"></div>
           ))}
         </div>
@@ -75,14 +124,14 @@ export default function WorkoutsPage() {
       {workouts.length === 0 ? (
         <div className="card text-center py-12">
           <Calendar className="w-16 h-16 mx-auto text-dark-muted mb-4" />
-          <p className="text-dark-muted mb-4">Нет тренировок</p>
+          <p className="text-dark-muted mb-4">Нет завершённых тренировок с подходами</p>
           <Link to="/log-workout" className="btn-primary inline-block">
             Начать тренировку
           </Link>
         </div>
       ) : (
         <div className="space-y-3">
-          {workouts.map(workout => (
+          {workouts.map((workout) => (
             <div key={workout.id} className="card">
               <Link to={`/workouts/${workout.id}`} className="block">
                 <div className="flex items-start justify-between mb-3">
@@ -90,13 +139,11 @@ export default function WorkoutsPage() {
                     <div className="font-semibold text-lg">
                       {format(new Date(workout.workout_date), 'd MMMM yyyy', { locale: ru })}
                     </div>
-                    <div className="text-sm text-dark-muted">
-                      {workout.sets?.[0]?.count || 0} подходов
-                    </div>
+                    <div className="text-sm text-dark-muted">{workout.set_count} подходов</div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-primary-500">
-                      {Math.round(workout.total_volume_kg || 0)} кг
+                      {Math.round(workout.display_volume_kg || 0)} кг
                     </div>
                     <div className="text-xs text-dark-muted">объём</div>
                   </div>

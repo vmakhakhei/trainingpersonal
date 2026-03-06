@@ -100,3 +100,60 @@ curl -X POST https://your-app.vercel.app/api/tools \
     }
   }'
 ```
+
+## AI Suggest API
+
+Canonical endpoint: `POST /api/ai/suggest`
+
+### Request format
+
+```json
+{
+  "prompt_type": "autofill_set",
+  "context": {
+    "exercise_id": "uuid",
+    "workout_id": "uuid",
+    "recent_sets": []
+  }
+}
+```
+
+`prompt_type` supports:
+- `autofill_set`: returns a suggestion with `weight_kg`, `reps`, `rpe` based on last known set.
+- `session_summary`: returns workout summary payload (`summary`, `highlights`, `suggestions`).
+
+### Response format
+
+```json
+{
+  "success": true,
+  "trace_id": "uuid",
+  "prompt_type": "autofill_set",
+  "suggestions": [
+    {
+      "id": "s1",
+      "type": "autofill",
+      "payload": {
+        "weight_kg": 100,
+        "reps": 8,
+        "rpe": 8
+      },
+      "confidence": 0.9,
+      "explain": "последний подход был 100×8",
+      "sources": []
+    }
+  ],
+  "cached": false
+}
+```
+
+### curl example
+
+```bash
+curl -X POST https://onlinetrainer.vercel.app/api/ai/suggest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt_type": "autofill_set",
+    "context": {"exercise_id": "uuid"}
+  }'
+```
