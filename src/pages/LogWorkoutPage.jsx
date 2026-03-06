@@ -478,8 +478,8 @@ export default function LogWorkoutPage() {
 
       {/* ─── Header ─── */}
       <div className="bg-dark-surface border-b border-dark-border p-4 safe-top">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold">Новая тренировка</h1>
             {sets.length > 0 && (
               <p className="text-xs text-dark-muted mt-0.5">
@@ -487,16 +487,32 @@ export default function LogWorkoutPage() {
               </p>
             )}
           </div>
-          <button
-            onClick={finishWorkout}
-            disabled={finishingWorkout}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            <span>
-              {finishingWorkout ? 'Завершение...' : sets.length === 0 ? 'Отмена' : 'Завершить'}
-            </span>
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Кнопка + Упражнение — всегда видна */}
+            <button
+              onClick={() => {
+                setSelectedExercise(null);
+                setShowExercisePicker(true);
+              }}
+              className="flex items-center gap-1 bg-dark-elevated border border-dark-border
+                         text-dark-text text-sm font-medium px-3 py-2 rounded-lg
+                         hover:border-primary-500/50 transition-colors"
+              title="Добавить упражнение"
+            >
+              <Plus className="w-4 h-4 text-primary-500" />
+              <span className="hidden sm:inline">Упражнение</span>
+            </button>
+            <button
+              onClick={finishWorkout}
+              disabled={finishingWorkout}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Save className="w-4 h-4" />
+              <span>
+                {finishingWorkout ? 'Завершение...' : sets.length === 0 ? 'Отмена' : 'Завершить'}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -701,6 +717,21 @@ export default function LogWorkoutPage() {
               </div>
             </div>
           )}
+
+          {/* ─── Следующее упражнение ─── */}
+          <button
+            onClick={() => {
+              setSelectedExercise(null);
+              setShowExercisePicker(true);
+            }}
+            className="w-full flex items-center justify-center gap-2 py-3 px-4
+                       border border-dashed border-dark-border rounded-xl
+                       text-dark-muted hover:border-primary-500/50 hover:text-primary-400
+                       transition-colors text-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Добавить следующее упражнение
+          </button>
         </div>
       )}
 
@@ -719,8 +750,11 @@ export default function LogWorkoutPage() {
                 <button
                   key={exercise.id}
                   onClick={() => {
-                    setSelectedExercise(exercise);
+                    // Сбрасываем форму и историю перед выбором нового упражнения
                     setQuickSet({ weight_kg: '', reps: '', rpe: '' });
+                    setPastHistory(null);
+                    setFullHistory({});
+                    setSelectedExercise(exercise);
                     setShowExercisePicker(false);
                   }}
                   className="w-full card hover:bg-dark-elevated transition-colors text-left py-3"
