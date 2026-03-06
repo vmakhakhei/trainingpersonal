@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Save, X, Dumbbell } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
@@ -125,11 +125,10 @@ export default function LogWorkoutPage() {
     };
   }, [selectedExercise?.id, workout?.id, sets]);
 
-  // Загрузка прошлых подходов при выборе упражнения
+  // Загрузка прошлых подходов при выборе упражнения (один раз при начале упражнения)
   useEffect(() => {
     let cancelled = false;
-
-    async function loadPastSetsSuggestions() {
+    const timeoutId = setTimeout(async () => {
       if (!selectedExercise?.id || !workout?.id) {
         setPastSetsSuggestions([]);
         setCurrentPastSuggestionIndex(0);
@@ -180,14 +179,13 @@ export default function LogWorkoutPage() {
           setLoadingPastSuggestions(false);
         }
       }
-    }
-
-    loadPastSetsSuggestions();
+    }, 300); // Небольшой debounce для избежания лишних запросов при быстром переключении
 
     return () => {
       cancelled = true;
+      clearTimeout(timeoutId);
     };
-  }, [selectedExercise?.id, workout?.id, quickSet]);
+  }, [selectedExercise?.id, workout?.id]); // Убрали quickSet из зависимостей
 
   async function loadExercises() {
     // Источник: core_features.exercise_library

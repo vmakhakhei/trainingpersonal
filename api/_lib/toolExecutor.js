@@ -94,6 +94,29 @@ function normalizeArgumentValue(field, value, schema) {
     return num;
   }
 
+  if (schema.type === 'array') {
+    if (!Array.isArray(value)) {
+      throw new ToolExecutionError(`Argument "${field}" must be an array`, 'INVALID_ARGUMENTS', 400);
+    }
+
+    if (schema.items) {
+      const itemSchema = schema.items;
+      return value.map((item, index) => {
+        try {
+          return normalizeArgumentValue(`${field}[${index}]`, item, itemSchema);
+        } catch (error) {
+          throw new ToolExecutionError(
+            `Invalid item at index ${index} in "${field}": ${error.message}`,
+            'INVALID_ARGUMENTS',
+            400
+          );
+        }
+      });
+    }
+
+    return value;
+  }
+
   throw new ToolExecutionError(
     `Unsupported argument schema for "${field}"`,
     'INVALID_ARGUMENTS',
