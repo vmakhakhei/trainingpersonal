@@ -156,6 +156,15 @@ export default function LogWorkoutPage() {
           setPastSetsSuggestions(response.suggestions);
           setCurrentPastSuggestionIndex(0);
           setExerciseHistory(response.grouped_by_date || {});
+
+          // Автозаполнение quick form последним подходом, если форма пустая
+          const firstSuggestion = response.suggestions[0];
+          if (firstSuggestion?.payload) {
+            const isQuickSetEmpty = !quickSet.weight_kg && !quickSet.reps && !quickSet.rpe;
+            if (isQuickSetEmpty) {
+              applySetToQuickForm(firstSuggestion.payload);
+            }
+          }
         } else {
           setPastSetsSuggestions([]);
           setExerciseHistory({});
@@ -178,7 +187,7 @@ export default function LogWorkoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedExercise?.id, workout?.id]);
+  }, [selectedExercise?.id, workout?.id, quickSet]);
 
   async function loadExercises() {
     // Источник: core_features.exercise_library
