@@ -3,72 +3,124 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────
+   ТЁМНАЯ ТЕМА (по умолчанию) — как сейчас
+───────────────────────────────────────────── */
+:root,
+html.dark {
+  /* Акцент — teal (из Figma дизайна) */
+  --color-primary-50: #f0fdfa;
+  --color-primary-100: #ccfbf1;
+  --color-primary-500: #14b8a6;
+  --color-primary-600: #0d9488;
+  --color-primary-700: #0f766e;
+  --color-primary-800: #115e59;
+  --color-primary-900: #134e4a;
+
+  /* Фон и поверхности */
+  --color-bg: #0a0a0a;
+  --color-surface: #1a1a1a;
+  --color-elevated: #252525;
+  --color-border: #2a2a2a;
+
+  /* Текст */
+  --color-text: #e5e5e5;
+  --color-muted: #a3a3a3;
+  --color-subtle: #525252;
+
+  /* Тени */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-card-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+
+  /* Цвет фона <body> */
+  color-scheme: dark;
+}
+
+/* ─────────────────────────────────────────────
+   СВЕТЛАЯ ТЕМА — из Figma редизайна
+───────────────────────────────────────────── */
+html.light {
+  /* Акцент — тот же teal, чуть насыщеннее */
+  --color-primary-50: #f0fdfa;
+  --color-primary-100: #ccfbf1;
+  --color-primary-500: #0d9488;
+  --color-primary-600: #0f766e;
+  --color-primary-700: #115e59;
+  --color-primary-800: #134e4a;
+  --color-primary-900: #0f3e3a;
+
+  /* Фон и поверхности */
+  --color-bg: #f9fafb;
+  --color-surface: #ffffff;
+  --color-elevated: #f3f4f6;
+  --color-border: #e5e7eb;
+
+  /* Текст */
+  --color-text: #111827;
+  --color-muted: #6b7280;
+  --color-subtle: #9ca3af;
+
+  /* Тени — более заметные на светлом */
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-card-md: 0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  color-scheme: light;
+}
+
+/* ─────────────────────────────────────────────
+   BASE
+───────────────────────────────────────────── */
 @layer base {
   * {
     @apply border-dark-border;
   }
-  
+
   html {
-    /* Источник: ux_guidelines.font_min_sp = 16 */
     font-size: 16px;
   }
-  
+
   body {
     @apply antialiased;
+    background-color: var(--color-bg);
+    color: var(--color-text);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-      sans-serif;
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    /* Safe area для iPhone (источник: architecture - оптимизация под iPhone) */
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+    /* Плавный переход при смене темы */
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  input, textarea, select {
-    /* Предотвращение zoom на iOS */
+  input,
+  textarea,
+  select {
     font-size: 16px;
+    /* предотвращение zoom на iOS */
   }
 }
 
+/* ─────────────────────────────────────────────
+   КОМПОНЕНТЫ
+───────────────────────────────────────────── */
 @layer components {
-  /* Источник: ux_guidelines.touch_target_px = 44 */
   .btn-primary {
-    @apply bg-primary-600 text-white px-4 py-2.5 rounded-lg font-medium
-           hover:bg-primary-700 active:bg-primary-800
-           transition-colors duration-200
-           min-h-touch
-           disabled:opacity-50 disabled:cursor-not-allowed
-           focus:outline-none focus:ring-2 focus:ring-primary-500;
+    @apply bg-primary-600 text-white px-4 py-2.5 rounded-lg font-medium hover:bg-primary-700 active:bg-primary-800 transition-colors duration-200 min-h-touch disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-primary-500;
   }
 
   .btn-secondary {
-    @apply bg-dark-surface text-dark-text px-4 py-2.5 rounded-lg font-medium
-           hover:bg-dark-elevated active:bg-dark-border
-           border border-dark-border
-           transition-colors duration-200
-           min-h-touch
-           focus:outline-none focus:ring-2 focus:ring-dark-border;
+    @apply bg-dark-surface text-dark-text px-4 py-2.5 rounded-lg font-medium hover:bg-dark-elevated active:bg-dark-border border border-dark-border transition-colors duration-200 min-h-touch focus:outline-none focus:ring-2 focus:ring-dark-border;
   }
 
   .btn-ghost {
-    @apply text-dark-text px-3 py-2 rounded-lg
-           hover:bg-dark-surface active:bg-dark-elevated
-           transition-colors duration-200
-           min-h-touch
-           focus:outline-none;
+    @apply text-dark-text px-3 py-2 rounded-lg hover:bg-dark-surface active:bg-dark-elevated transition-colors duration-200 min-h-touch focus:outline-none;
   }
 
   .input-field {
-    @apply bg-dark-surface text-dark-text px-4 py-3 rounded-lg
-           border border-dark-border
-           focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent
-           placeholder:text-dark-muted
-           min-h-touch
-           text-base
-           transition-all duration-200;
+    @apply bg-dark-surface text-dark-text px-4 py-3 rounded-lg border border-dark-border focus:outline-none focus:ring-2 focus:ring-primary-600 focus:border-transparent placeholder:text-dark-muted min-h-touch text-base transition-all duration-200;
   }
 
   .input-field:disabled {
@@ -76,38 +128,44 @@
   }
 
   .card {
-    @apply bg-dark-surface rounded-xl p-4 border border-dark-border shadow-sm;
+    @apply bg-dark-surface rounded-xl p-4 border border-dark-border;
+    box-shadow: var(--shadow-card);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 
   .card-elevated {
-    @apply bg-dark-elevated rounded-xl p-4 border border-dark-border shadow-md;
+    @apply bg-dark-elevated rounded-xl p-4 border border-dark-border;
+    box-shadow: var(--shadow-card-md);
+    transition: background-color 0.2s ease, border-color 0.2s ease;
   }
 
-  /* Источник: ux_guidelines.notes - inline-редактирование */
   .inline-editable {
-    @apply cursor-pointer hover:bg-dark-surface/50 rounded px-2 py-1
-           transition-colors duration-150;
+    @apply cursor-pointer hover:bg-dark-surface/50 rounded px-2 py-1 transition-colors duration-150;
   }
 
   .quick-action {
-    @apply p-2 rounded-lg hover:bg-dark-surface active:bg-dark-elevated
-           transition-colors duration-150
-           min-w-[44px] min-h-[44px]
-           flex items-center justify-center;
+    @apply p-2 rounded-lg hover:bg-dark-surface active:bg-dark-elevated transition-colors duration-150 min-w-[44px] min-h-[44px] flex items-center justify-center;
   }
 
-  /* Источник: ux_guidelines.notes - быстрый свайп для удаления */
   .swipeable {
     touch-action: pan-y;
     user-select: none;
   }
+
+  /* Кнопка переключения темы */
+  .theme-toggle {
+    @apply w-10 h-10 rounded-full flex items-center justify-center bg-dark-surface border border-dark-border hover:bg-dark-elevated transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500;
+  }
 }
 
+/* ─────────────────────────────────────────────
+   УТИЛИТЫ
+───────────────────────────────────────────── */
 @layer utilities {
   .safe-top {
     padding-top: env(safe-area-inset-top);
   }
-  
+
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
