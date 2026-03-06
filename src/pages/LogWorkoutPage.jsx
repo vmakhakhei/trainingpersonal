@@ -249,21 +249,26 @@ export default function LogWorkoutPage() {
     async function loadHistory() {
       try {
         // Получаем последние N подходов из exercise_progress view
+        // Запрашиваем из sets напрямую — exercise_progress не имеет set_order
+        // !inner в select автоматически фильтрует строки где workouts = null
+        // Фильтр по workouts.is_deleted через синтаксис PostgREST
         const { data } = await supabase
-          .from('exercise_progress')
-          .select('weight_kg, reps, rpe, workout_date')
-          .eq('user_id', SINGLE_USER_ID)
+          .from('sets')
+          .select('weight_kg, reps, rpe, set_order, workouts!inner(workout_date)')
           .eq('exercise_id', selectedExercise.id)
-          .order('workout_date', { ascending: false })
-          .order('set_order', { ascending: true })  // порядок внутри тренировки
-          .limit(50);
+          .eq('is_deleted', false)
+          .eq('is_warmup', false)
+          .eq('workouts.is_deleted', false)
+          .order('workouts(workout_date)', { ascending: false })
+          .order('set_order', { ascending: true })
+          .limit(100);
 
         if (cancelled || !data?.length) return;
 
-        // Группируем по дате
+        // Группируем по дате (workout_date вложен в workouts при запросе из sets)
         const grouped = {};
         data.forEach(row => {
-          const d = row.workout_date;
+          const d = row.workouts?.workout_date || row.workout_date;
           if (!grouped[d]) grouped[d] = [];
           grouped[d].push({
             weight_kg: parseFloat(row.weight_kg),
