@@ -4,6 +4,7 @@ import { getWorkoutHistory } from '../../src/server/tools/getWorkoutHistory.js';
 import { getExerciseProgress } from '../../src/server/tools/getExerciseProgress.js';
 import { logSet } from '../../src/server/tools/logSet.js';
 import { createTrainingPlan } from '../../src/server/tools/createTrainingPlan.js';
+import { suggestPastSets } from '../../src/server/tools/suggestPastSets.js';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -12,7 +13,8 @@ const TOOL_HANDLERS = {
   getWorkoutHistory,
   getExerciseProgress,
   logSet,
-  createTrainingPlan
+  createTrainingPlan,
+  suggest_past_sets: suggestPastSets
 };
 
 export class ToolExecutionError extends Error {

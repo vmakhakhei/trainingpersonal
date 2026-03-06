@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Save, X, Dumbbell } from 'lucide-react';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 import SuggestionPill from '../components/AI/SuggestionPill';
+import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 import {
   applyWeightChange,
   formatWeightValue,
@@ -39,6 +40,12 @@ export default function LogWorkoutPage() {
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [sessionSummary, setSessionSummary] = useState(null);
+  // Состояния для предложений прошлых подходов
+  const [pastSetsSuggestions, setPastSetsSuggestions] = useState([]);
+  const [currentPastSuggestionIndex, setCurrentPastSuggestionIndex] = useState(0);
+  const [loadingPastSuggestions, setLoadingPastSuggestions] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [exerciseHistory, setExerciseHistory] = useState({});
 
   // Источник: ux_guidelines - минимизация кликов (≤3 для добавления подхода)
   const [quickSet, setQuickSet] = useState({
@@ -117,6 +124,61 @@ export default function LogWorkoutPage() {
       cancelled = true;
     };
   }, [selectedExercise?.id, workout?.id, sets]);
+
+  // Загрузка прошлых подходов при выборе упражнения
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPastSetsSuggestions() {
+      if (!selectedExercise?.id || !workout?.id) {
+        setPastSetsSuggestions([]);
+        setCurrentPastSuggestionIndex(0);
+        setExerciseHistory({});
+        return;
+      }
+
+      try {
+        setLoadingPastSuggestions(true);
+
+        // Используем tool suggest_past_sets
+        const response = await callToolsApi({
+          tool: 'suggest_past_sets',
+          arguments: {
+            exercise_id: selectedExercise.id,
+            exclude_set_ids: [],
+            limit_workouts: 3
+          }
+        });
+
+        if (cancelled) return;
+
+        if (response?.suggestions) {
+          setPastSetsSuggestions(response.suggestions);
+          setCurrentPastSuggestionIndex(0);
+          setExerciseHistory(response.grouped_by_date || {});
+        } else {
+          setPastSetsSuggestions([]);
+          setExerciseHistory({});
+        }
+      } catch (error) {
+        console.error('Error loading past sets suggestions:', error);
+        if (!cancelled) {
+          setPastSetsSuggestions([]);
+          setExerciseHistory({});
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingPastSuggestions(false);
+        }
+      }
+    }
+
+    loadPastSetsSuggestions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedExercise?.id, workout?.id]);
 
   async function loadExercises() {
     // Источник: core_features.exercise_library
@@ -200,6 +262,85 @@ export default function LogWorkoutPage() {
       ...prev,
       weight_kg: nextWeight
     }));
+  }
+
+  // Функции для работы с предложениями прошлых подходов
+  function addPastSuggestionSet() {
+    const currentSuggestion = pastSetsSuggestions[currentPastSuggestionIndex];
+    if (!currentSuggestion?.payload) {
+      return;
+    }
+
+    // Применяем к форме и добавляем как обычный подход
+    applySetToQuickForm(currentSuggestion.payload);
+    addSet();
+
+    // После добавления переходим к следующему предложению
+    if (currentPastSuggestionIndex < pastSetsSuggestions.length - 1) {
+      setCurrentPastSuggestionIndex(prev => prev + 1);
+    } else {
+      // Если предложения закончились, очищаем очередь
+      setPastSetsSuggestions([]);
+      setCurrentPastSuggestionIndex(0);
+    }
+  }
+
+  function skipPastSuggestion() {
+    if (currentPastSuggestionIndex < pastSetsSuggestions.length - 1) {
+      setCurrentPastSuggestionIndex(prev => prev + 1);
+    } else {
+      setPastSetsSuggestions([]);
+      setCurrentPastSuggestionIndex(0);
+    }
+  }
+
+  function adjustPastSuggestionWeight(adjustmentPercent) {
+    const currentSuggestion = pastSetsSuggestions[currentPastSuggestionIndex];
+    if (!currentSuggestion?.payload) {
+      return;
+    }
+
+    const updatedWeight = currentSuggestion.payload.weight_kg * (1 + adjustmentPercent / 100);
+    const updatedSuggestion = {
+      ...currentSuggestion,
+      payload: {
+        ...currentSuggestion.payload,
+        weight_kg: Math.round(updatedWeight * 100) / 100
+      }
+    };
+
+    const updatedQueue = [...pastSetsSuggestions];
+    updatedQueue[currentPastSuggestionIndex] = updatedSuggestion;
+    setPastSetsSuggestions(updatedQueue);
+
+    // Обновляем форму, если предложение уже применено
+    applySetToQuickForm(updatedSuggestion.payload);
+  }
+
+  // Функции для работы с модалкой истории
+  function handleAddSetFromHistory(set) {
+    applySetToQuickForm(set);
+    addSet();
+  }
+
+  function handleAddAllFromDate(date) {
+    const sets = exerciseHistory[date] || [];
+    if (sets.length === 0) return;
+
+    // Применяем первый сет и добавляем, остальные добавляем без изменения формы
+    const firstSet = sets[0];
+    applySetToQuickForm(firstSet);
+    addSet();
+
+    // Для остальных сетов добавляем асинхронно (можно улучшить)
+    if (sets.length > 1) {
+      setTimeout(() => {
+        sets.slice(1).forEach(set => {
+          applySetToQuickForm(set);
+          addSet();
+        });
+      }, 100);
+    }
   }
 
   async function addSet() {
@@ -432,6 +573,79 @@ export default function LogWorkoutPage() {
           <div className="card">
             <div className="text-sm font-medium mb-3">Быстрое добавление подхода</div>
 
+            {/* Past Sets Suggestions */}
+            {loadingPastSuggestions && (
+              <div className="mb-4 p-3 border border-primary-500/30 rounded-lg bg-primary-500/5">
+                <div className="text-xs text-dark-muted">Загрузка прошлых подходов...</div>
+              </div>
+            )}
+            {!loadingPastSuggestions && pastSetsSuggestions.length > 0 && (
+              <div className="mb-4 p-3 border border-primary-500/30 rounded-lg bg-primary-500/5">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-medium">Предыдущие подходы</div>
+                  <div className="text-xs text-dark-muted">
+                    {currentPastSuggestionIndex + 1} / {pastSetsSuggestions.length}
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="font-medium">
+                        {pastSetsSuggestions[currentPastSuggestionIndex]?.payload?.weight_kg} кг × {pastSetsSuggestions[currentPastSuggestionIndex]?.payload?.reps}
+                      </span>
+                      {pastSetsSuggestions[currentPastSuggestionIndex]?.payload?.rpe && (
+                        <span className="text-xs text-dark-muted ml-2">
+                          RPE {pastSetsSuggestions[currentPastSuggestionIndex]?.payload?.rpe}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-dark-muted">
+                      {pastSetsSuggestions[currentPastSuggestionIndex]?.explain}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={addPastSuggestionSet}
+                    className="btn-primary text-sm px-3 py-2"
+                  >
+                    Добавить
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => adjustPastSuggestionWeight(5)}
+                    className="btn-secondary text-sm px-3 py-2"
+                  >
+                    +5%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => adjustPastSuggestionWeight(-5)}
+                    className="btn-secondary text-sm px-3 py-2"
+                  >
+                    -5%
+                  </button>
+                  <button
+                    type="button"
+                    onClick={skipPastSuggestion}
+                    className="btn-secondary text-sm px-3 py-2"
+                  >
+                    Пропустить
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowHistoryModal(true)}
+                    className="btn-secondary text-sm px-3 py-2"
+                  >
+                    История
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2 mb-3">
               {loadingSuggestion && (
                 <div className="text-xs text-dark-muted">AI подбирает smart autofill...</div>
@@ -613,6 +827,16 @@ export default function LogWorkoutPage() {
           </div>
         </div>
       )}
+
+      {/* Exercise History Modal */}
+      <ExerciseHistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        exerciseName={selectedExercise?.name_ru}
+        history={exerciseHistory}
+        onAddSet={handleAddSetFromHistory}
+        onAddAllFromDate={handleAddAllFromDate}
+      />
     </div>
   );
 }

@@ -34,6 +34,14 @@ export const TOOL_REGISTRY = {
       days_per_week: { type: 'number', integer: true, min: 1, max: 7, default: 3 },
       duration_weeks: { type: 'number', integer: true, min: 1, max: 52, default: 8 }
     }
+  },
+  suggest_past_sets: {
+    description: 'Suggests past sets for a given exercise, optionally excluding already added sets',
+    args: {
+      exercise_id: { type: 'uuid', required: true },
+      exclude_set_ids: { type: 'array', items: { type: 'uuid' }, default: [] },
+      limit_workouts: { type: 'number', integer: true, min: 1, max: 10, default: 3 }
+    }
   }
 };
 
