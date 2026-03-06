@@ -151,17 +151,18 @@ export default function LogWorkoutPage() {
 
         if (cancelled) return;
 
-        if (response?.suggestions) {
-          setPastSetsSuggestions(response.suggestions);
+        if (response?.past_sets) {
+          // Сохраняем массив подходов из последней тренировки
+          setPastSetsSuggestions(response.past_sets);
           setCurrentPastSuggestionIndex(0);
           setExerciseHistory(response.grouped_by_date || {});
 
-          // Автозаполнение quick form последним подходом, если форма пустая
-          const firstSuggestion = response.suggestions[0];
-          if (firstSuggestion?.payload) {
+          // Автозаполнение quick form первым подходом, если форма пустая
+          const firstSet = response.past_sets[0];
+          if (firstSet) {
             const isQuickSetEmpty = !quickSet.weight_kg && !quickSet.reps && !quickSet.rpe;
             if (isQuickSetEmpty) {
-              applySetToQuickForm(firstSuggestion.payload);
+              applySetToQuickForm(firstSet);
             }
           }
         } else {
@@ -403,7 +404,16 @@ export default function LogWorkoutPage() {
         explain: `последний подход был ${data.weight_kg}×${data.reps}`,
         sources: []
       });
-      setQuickSet((prev) => ({ ...prev, reps: '' }));
+
+      // Автоматическое заполнение quick form следующим подходом из истории
+      const nextSetIndex = selectedExerciseSets.length; // текущее количество подходов ДО добавления (индекс следующего)
+      if (pastSetsSuggestions.length > nextSetIndex) {
+        const nextSet = pastSetsSuggestions[nextSetIndex];
+        applySetToQuickForm(nextSet);
+      } else {
+        // Если подходов в истории нет, очищаем форму (оставляем вес, но очищаем повторения)
+        setQuickSet((prev) => ({ ...prev, reps: '', rpe: '' }));
+      }
     } catch (error) {
       console.error('Error adding set:', error);
       alert('Ошибка добавления подхода');
@@ -589,65 +599,34 @@ export default function LogWorkoutPage() {
             {!loadingPastSuggestions && pastSetsSuggestions.length > 0 && (
               <div className="mb-4 p-3 border border-primary-500/30 rounded-lg bg-primary-500/5">
                 <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-medium">Предыдущие подходы</div>
+                  <div className="text-sm font-medium">История упражнения</div>
                   <div className="text-xs text-dark-muted">
-                    {currentPastSuggestionIndex + 1} / {pastSetsSuggestions.length}
+                    {pastSetsSuggestions.length} подходов в последней тренировке
                   </div>
                 </div>
 
                 <div className="mb-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="font-medium">
-                        {pastSetsSuggestions[currentPastSuggestionIndex]?.payload?.weight_kg} кг × {pastSetsSuggestions[currentPastSuggestionIndex]?.payload?.reps}
+                  <div className="text-sm">
+                    Следующий подход будет заполнен автоматически из истории.
+                    {selectedExerciseSets.length < pastSetsSuggestions.length ? (
+                      <span className="block text-xs text-dark-muted mt-1">
+                        Подход {selectedExerciseSets.length + 1} из {pastSetsSuggestions.length}: {pastSetsSuggestions[selectedExerciseSets.length]?.weight_kg} кг × {pastSetsSuggestions[selectedExerciseSets.length]?.reps}
                       </span>
-                      {pastSetsSuggestions[currentPastSuggestionIndex]?.payload?.rpe && (
-                        <span className="text-xs text-dark-muted ml-2">
-                          RPE {pastSetsSuggestions[currentPastSuggestionIndex]?.payload?.rpe}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-dark-muted">
-                      {pastSetsSuggestions[currentPastSuggestionIndex]?.explain}
-                    </div>
+                    ) : (
+                      <span className="block text-xs text-dark-muted mt-1">
+                        Все подходы из истории использованы.
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={addPastSuggestionSet}
-                    className="btn-primary text-sm px-3 py-2"
-                  >
-                    Добавить
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => adjustPastSuggestionWeight(5)}
-                    className="btn-secondary text-sm px-3 py-2"
-                  >
-                    +5%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => adjustPastSuggestionWeight(-5)}
-                    className="btn-secondary text-sm px-3 py-2"
-                  >
-                    -5%
-                  </button>
-                  <button
-                    type="button"
-                    onClick={skipPastSuggestion}
-                    className="btn-secondary text-sm px-3 py-2"
-                  >
-                    Пропустить
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setShowHistoryModal(true)}
                     className="btn-secondary text-sm px-3 py-2"
                   >
-                    История
+                    Показать историю
                   </button>
                 </div>
               </div>
