@@ -1,16 +1,15 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Save, X, Dumbbell } from 'lucide-react';
+import { Plus, Save, X, Dumbbell, Clock, History, ChevronRight } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { ru } from 'date-fns/locale';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
-import SuggestionPill from '../components/AI/SuggestionPill';
 import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
 import {
   applyWeightChange,
   formatWeightValue,
-  requestAutofillSuggestion,
   requestSessionSummary
 } from '../lib/aiSuggest';
-import { callToolsApi } from '../lib/toolsClient';
 
 function parseNumberInput(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -20,184 +19,317 @@ function parseNumberInput(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-// ─── Проверяем есть ли реальный URL для tools API ────────────────────────────
-// Если не задан или это локалхост — features деградируют без ошибок
-function hasToolsApi() {
-  const url = import.meta.env.VITE_TOOLS_API_URL;
-  return url && !url.includes('localhost') && !url.includes('127.0.0.1');
+function repsLabel(n) {
+  if (n === 1) return 'повторение';
+  if (n >= 2 && n <= 4) return 'повторения';
+  return 'повторений';
 }
 
+// ─── Компонент: баннер "из прошлой тренировки" ───────────────────────────────
+function HistoryBanner({ date, setsTotal, currentSetIndex }) {
+  const dateStr = date
+    ? format(parseISO(date), 'd MMMM', { locale: ru })
+    : null;
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-600/10 border border-primary-600/20 mb-3">
+      <Clock className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
+      <p className="text-xs text-primary-300 flex-1">
+        Заполнено из тренировки
+        {dateStr ? <span className="font-medium text-primary-200"> {dateStr}</span> : ''}
+        {setsTotal > 0 && (
+          <span className="text-primary-400">
+            {' '}· подход {Math.min(currentSetIndex + 1, setsTotal)} из {setsTotal}
+          </span>
+        )}
+      </p>
+    </div>
+  );
+}
+
+// ─── Компонент: карточка добавленного сета ────────────────────────────────────
+function SetCard({ set, index, isFromHistory }) {
+  const vol = Math.round((parseFloat(set.weight_kg) || 0) * (set.reps || 0));
+  return (
+    <div className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all
+      ${isFromHistory
+        ? 'bg-dark-elevated border-dark-border'
+        : 'bg-dark-surface border-primary-600/30 shadow-sm'}`}
+    >
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-mono text-dark-muted w-5">#{index + 1}</span>
+        <div>
+          <span className="font-semibold">
+            {set.weight_kg} кг × {set.reps}
+          </span>
+          {set.rpe && (
+            <span className="text-xs text-dark-muted ml-2">RPE {set.rpe}</span>
+          )}
+        </div>
+      </div>
+      <span className="text-sm text-dark-muted">{vol} кг</span>
+    </div>
+  );
+}
+
+// ─── Компонент: модал шаблона тренировки ─────────────────────────────────────
+function SaveTemplateModal({ exercises, sets, onSave, onSkip }) {
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Группируем упражнения
+  const exerciseSummary = exercises.map(ex => {
+    const exSets = sets.filter(s => s.exercise_id === ex.id);
+    return { ...ex, setsCount: exSets.length };
+  });
+
+  async function handleSave() {
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      // 1. Создаём план
+      const { data: plan, error: planErr } = await supabase
+        .from('workout_plans')
+        .insert({
+          user_id:       SINGLE_USER_ID,
+          name:          name.trim(),
+          description:   `Шаблон из тренировки ${format(new Date(), 'd MMMM yyyy', { locale: ru })}`,
+          goal:          'strength',
+          days_per_week: 1,
+          duration_weeks: 1,
+        })
+        .select('id')
+        .single();
+      if (planErr) throw planErr;
+
+      // 2. Добавляем упражнения
+      const planExercises = exerciseSummary.map((ex, i) => ({
+        plan_id:       plan.id,
+        exercise_id:   ex.id,
+        day_number:    1,
+        exercise_order: i + 1,
+        target_sets:   ex.setsCount,
+        target_reps_min: null,
+        target_reps_max: null,
+      }));
+      const { error: exErr } = await supabase.from('plan_exercises').insert(planExercises);
+      if (exErr) throw exErr;
+
+      onSave(plan.id);
+    } catch (e) {
+      console.error('Save template error:', e);
+      alert('Ошибка сохранения шаблона');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onSkip} />
+      <div className="relative w-full max-w-lg bg-dark-surface rounded-t-2xl border-t border-dark-border p-5 pb-8">
+        <div className="w-10 h-1 bg-dark-border rounded-full mx-auto mb-5" />
+        <h3 className="font-semibold text-lg mb-1">Сохранить как шаблон?</h3>
+        <p className="text-sm text-dark-muted mb-4">
+          Создай шаблон, чтобы быстро повторить эту тренировку
+        </p>
+
+        <div className="space-y-2 mb-4">
+          {exerciseSummary.map(ex => (
+            <div key={ex.id} className="flex items-center gap-2 text-sm">
+              <Dumbbell className="w-4 h-4 text-primary-500 flex-shrink-0" />
+              <span>{ex.name_ru}</span>
+              <span className="text-dark-muted">· {ex.setsCount} подх.</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-4">
+          <label className="text-sm text-dark-muted block mb-2">Название шаблона</label>
+          <input
+            type="text"
+            placeholder={`Тренировка ${format(new Date(), 'd MMMM', { locale: ru })}`}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            className="input-field w-full"
+            autoFocus
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+            className="btn-primary flex-1"
+          >
+            {saving ? 'Сохраняем...' : 'Сохранить'}
+          </button>
+          <button onClick={onSkip} className="btn-secondary flex-1">
+            Пропустить
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ГЛАВНЫЙ КОМПОНЕНТ ────────────────────────────────────────────────────────
 export default function LogWorkoutPage() {
   const navigate = useNavigate();
 
-  const [workout, setWorkout] = useState(null);
+  const [workout, setWorkout]               = useState(null);
   const [workoutCreating, setWorkoutCreating] = useState(false);
   const workoutRef = useRef(null);
 
-  const [exercises, setExercises] = useState([]);
+  const [exercises, setExercises]           = useState([]);
   const [selectedExercise, setSelectedExercise] = useState(null);
-  const [sets, setSets] = useState([]);
+  // Порядок упражнений в текущей тренировке
+  const [workoutExercises, setWorkoutExercises] = useState([]); // [{id, name_ru, primary_muscle}]
+  const [sets, setSets]                     = useState([]);
+
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [finishingWorkout, setFinishingWorkout] = useState(false);
-  const [creatingPlan, setCreatingPlan] = useState(false);
-  const [autofillSuggestion, setAutofillSuggestion] = useState(null);
-  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
-  const [sessionSummary, setSessionSummary] = useState(null);
-  const [pastSetsSuggestions, setPastSetsSuggestions] = useState([]);
-  const [loadingPastSuggestions, setLoadingPastSuggestions] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [exerciseHistory, setExerciseHistory] = useState({});
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [sessionSummary, setSessionSummary]       = useState(null);
+
+  // ─── История: загружается при выборе упражнения ──────────────────────────
+  // { date: '2025-03-01', sets: [{weight_kg, reps, rpe}] } | null
+  const [pastHistory, setPastHistory]             = useState(null);
+  const [loadingHistory, setLoadingHistory]       = useState(false);
+  const [showHistoryModal, setShowHistoryModal]   = useState(false);
+  const [fullHistory, setFullHistory]             = useState({}); // grouped_by_date
 
   const [quickSet, setQuickSet] = useState({ weight_kg: '', reps: '', rpe: '' });
 
+  // Синхронизируем ref для cleanup
   useEffect(() => { workoutRef.current = workout; }, [workout]);
 
   const selectedExerciseSets = useMemo(() =>
     !selectedExercise?.id ? [] : sets.filter(s => s.exercise_id === selectedExercise.id),
     [sets, selectedExercise?.id]
   );
+
   const lastExerciseSet = selectedExerciseSets.at(-1) ?? null;
+
   const canChangeWeight =
     parseNumberInput(quickSet.weight_kg) !== null ||
-    parseNumberInput(lastExerciseSet?.weight_kg) !== null ||
-    parseNumberInput(autofillSuggestion?.payload?.weight_kg) !== null;
+    parseNumberInput(lastExerciseSet?.weight_kg) !== null;
 
-  // ─── Init ─────────────────────────────────────────────────────────────────
+  // ─── Cleanup: мягкое удаление пустой тренировки при уходе ────────────────
   useEffect(() => {
     loadExercises();
     return () => {
-      // Cleanup: удаляем тренировку если ушли без подходов
       const w = workoutRef.current;
-      if (w?.id) {
-        supabase.from('workouts').select('total_volume_kg').eq('id', w.id).single()
-          .then(({ data }) => {
-            if (data && (parseFloat(data.total_volume_kg) || 0) === 0) {
-              supabase.from('workouts')
-                .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-                .eq('id', w.id).then(() => { });
-            }
-          });
-      }
+      if (!w?.id) return;
+      supabase.from('workouts').select('total_volume_kg').eq('id', w.id).single()
+        .then(({ data }) => {
+          if (data && (parseFloat(data.total_volume_kg) || 0) === 0) {
+            supabase.from('workouts')
+              .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+              .eq('id', w.id).then(() => {});
+          }
+        });
     };
   }, []);
 
-  // ─── Autofill suggestion ──────────────────────────────────────────────────
+  // ─── КЛЮЧЕВОЙ ФИКС: история загружается ТОЛЬКО по selectedExercise.id ────
+  // Не зависит от workout.id — работает до первого подхода
   useEffect(() => {
+    if (!selectedExercise?.id) {
+      setPastHistory(null);
+      setFullHistory({});
+      return;
+    }
+
     let cancelled = false;
-    async function load() {
-      if (!selectedExercise?.id || !workout?.id) { setAutofillSuggestion(null); return; }
+    setLoadingHistory(true);
+    setPastHistory(null);
+
+    async function loadHistory() {
       try {
-        setLoadingSuggestion(true);
-        const recentSets = sets.filter(s => s.exercise_id === selectedExercise.id).slice(-3)
-          .map(s => ({ weight_kg: s.weight_kg, reps: s.reps, rpe: s.rpe }));
-        const suggestion = await requestAutofillSuggestion({
-          exerciseId: selectedExercise.id, workoutId: workout.id, recentSets
+        // Получаем последние N подходов из exercise_progress view
+        const { data } = await supabase
+          .from('exercise_progress')
+          .select('weight_kg, reps, rpe, workout_date')
+          .eq('user_id', SINGLE_USER_ID)
+          .eq('exercise_id', selectedExercise.id)
+          .order('workout_date', { ascending: false })
+          .order('set_order', { ascending: true })  // порядок внутри тренировки
+          .limit(50);
+
+        if (cancelled || !data?.length) return;
+
+        // Группируем по дате
+        const grouped = {};
+        data.forEach(row => {
+          const d = row.workout_date;
+          if (!grouped[d]) grouped[d] = [];
+          grouped[d].push({
+            weight_kg: parseFloat(row.weight_kg),
+            reps:      row.reps,
+            rpe:       row.rpe,
+          });
         });
-        if (!cancelled) setAutofillSuggestion(suggestion);
+
+        setFullHistory(grouped);
+
+        // Берём ПОСЛЕДНЮЮ дату (исключая текущую тренировку если есть)
+        const today = new Date().toISOString().split('T')[0];
+        const dates = Object.keys(grouped).sort().reverse();
+        const lastDate = dates[0] === today ? dates[1] : dates[0];
+
+        if (!lastDate) return;
+
+        const historySets = grouped[lastDate] || [];
+
+        if (!cancelled) {
+          setPastHistory({ date: lastDate, sets: historySets });
+
+          // Автозаполнение: первый подход из предыдущей тренировки
+          const firstSet = historySets[0];
+          if (firstSet) {
+            setQuickSet({
+              weight_kg: formatWeightValue(firstSet.weight_kg),
+              reps:      String(firstSet.reps),
+              rpe:       firstSet.rpe != null ? String(firstSet.rpe) : '',
+            });
+          }
+        }
       } catch (e) {
-        if (!cancelled) { console.error(e); setAutofillSuggestion(null); }
+        console.error('History load error:', e);
       } finally {
-        if (!cancelled) setLoadingSuggestion(false);
+        if (!cancelled) setLoadingHistory(false);
       }
     }
-    load();
+
+    loadHistory();
     return () => { cancelled = true; };
-  }, [selectedExercise?.id, workout?.id, sets]);
+  }, [selectedExercise?.id]); // ← только exercise_id, без workout.id!
 
-  // ─── Past sets — только если tools API задан ─────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    const tid = setTimeout(async () => {
-      if (!selectedExercise?.id || !workout?.id) {
-        setPastSetsSuggestions([]); setExerciseHistory({}); return;
-      }
-
-      // ─── ФИКС: пропускаем если нет реального tools API ───────────────────
-      if (!hasToolsApi()) {
-        // Загружаем историю напрямую из Supabase вместо tools API
-        try {
-          const { data: history } = await supabase
-            .from('exercise_progress')
-            .select('weight_kg, reps, rpe, workout_date')
-            .eq('user_id', SINGLE_USER_ID)
-            .eq('exercise_id', selectedExercise.id)
-            .order('workout_date', { ascending: false })
-            .limit(30);
-
-          if (cancelled || !history?.length) return;
-
-          // Группируем по дате
-          const grouped = {};
-          history.forEach(row => {
-            const d = row.workout_date;
-            if (!grouped[d]) grouped[d] = [];
-            grouped[d].push({ weight_kg: parseFloat(row.weight_kg), reps: row.reps, rpe: row.rpe });
-          });
-
-          const lastDate = Object.keys(grouped).sort().reverse()[0];
-          const lastSets = grouped[lastDate] || [];
-
-          setPastSetsSuggestions(lastSets);
-          setExerciseHistory(grouped);
-
-          // Автозаполнение формы первым подходом если пустая
-          const first = lastSets[0];
-          if (first) {
-            setQuickSet(prev => {
-              if (prev.weight_kg || prev.reps) return prev;
-              return {
-                weight_kg: first.weight_kg != null ? formatWeightValue(first.weight_kg) : '',
-                reps: first.reps != null ? String(first.reps) : '',
-                rpe: first.rpe != null ? String(first.rpe) : '',
-              };
-            });
-          }
-        } catch (e) {
-          console.error('History load error:', e);
-        } finally {
-          if (!cancelled) setLoadingPastSuggestions(false);
-        }
-        return;
-      }
-
-      // tools API доступен — используем его
-      try {
-        setLoadingPastSuggestions(true);
-        const response = await callToolsApi({
-          tool: 'suggest_past_sets',
-          arguments: { exercise_id: selectedExercise.id, exclude_set_ids: [], limit_workouts: 3 }
-        });
-        if (cancelled) return;
-        if (response?.past_sets) {
-          setPastSetsSuggestions(response.past_sets);
-          setExerciseHistory(response.grouped_by_date || {});
-          const first = response.past_sets[0];
-          if (first) {
-            setQuickSet(prev => {
-              if (prev.weight_kg || prev.reps) return prev;
-              return {
-                weight_kg: first.weight_kg != null ? formatWeightValue(first.weight_kg) : prev.weight_kg,
-                reps: first.reps != null ? String(first.reps) : prev.reps,
-                rpe: first.rpe != null ? String(first.rpe) : '',
-              };
-            });
-          }
-        }
-      } catch (e) {
-        console.error('Past sets error:', e);
-        if (!cancelled) { setPastSetsSuggestions([]); setExerciseHistory({}); }
-      } finally {
-        if (!cancelled) setLoadingPastSuggestions(false);
-      }
-    }, 300);
-    return () => { cancelled = true; clearTimeout(tid); };
-  }, [selectedExercise?.id, workout?.id]);
+  // ─── При добавлении подхода — автозаполнение следующего из истории ────────
+  function advanceHistoryPrefill(newSetsCount) {
+    if (!pastHistory?.sets) return;
+    const nextSet = pastHistory.sets[newSetsCount]; // индекс = количество уже добавленных
+    if (nextSet) {
+      setQuickSet({
+        weight_kg: formatWeightValue(nextSet.weight_kg),
+        reps:      String(nextSet.reps),
+        rpe:       nextSet.rpe != null ? String(nextSet.rpe) : '',
+      });
+    } else {
+      // История закончилась — оставляем вес, очищаем повторения
+      setQuickSet(prev => ({ ...prev, reps: '', rpe: '' }));
+    }
+  }
 
   async function loadExercises() {
-    const { data, error } = await supabase.from('exercises').select('*')
-      .eq('is_deleted', false).order('name_ru');
-    if (!error && data) setExercises(data);
+    const { data } = await supabase
+      .from('exercises')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('name_ru');
+    if (data) setExercises(data);
   }
 
   async function ensureWorkoutCreated() {
@@ -205,11 +337,15 @@ export default function LogWorkoutPage() {
     if (workoutCreating) return null;
     try {
       setWorkoutCreating(true);
-      const { data, error } = await supabase.from('workouts').insert({
-        user_id: SINGLE_USER_ID,
-        workout_date: new Date().toISOString().split('T')[0],
-        start_time: new Date().toISOString()
-      }).select().single();
+      const { data, error } = await supabase
+        .from('workouts')
+        .insert({
+          user_id:      SINGLE_USER_ID,
+          workout_date: new Date().toISOString().split('T')[0],
+          start_time:   new Date().toISOString(),
+        })
+        .select()
+        .single();
       if (error) throw error;
       setWorkout(data);
       workoutRef.current = data;
@@ -223,65 +359,58 @@ export default function LogWorkoutPage() {
     }
   }
 
-  function applySetToQuickForm(payload) {
-    if (!payload) return;
-    setQuickSet(prev => ({
-      weight_kg: payload.weight_kg != null ? formatWeightValue(payload.weight_kg) : prev.weight_kg,
-      reps: payload.reps != null ? String(payload.reps) : prev.reps,
-      rpe: payload.rpe != null ? String(payload.rpe) : '',
-    }));
-  }
-
-  function repeatLastSet() { if (lastExerciseSet) applySetToQuickForm(lastExerciseSet); }
-
   function adjustWeight(multiplier) {
     const next = applyWeightChange({
-      currentWeight: quickSet.weight_kg,
-      fallbackWeight: lastExerciseSet?.weight_kg ?? autofillSuggestion?.payload?.weight_kg,
-      multiplier
+      currentWeight:  quickSet.weight_kg,
+      fallbackWeight: lastExerciseSet?.weight_kg,
+      multiplier,
     });
     if (next) setQuickSet(prev => ({ ...prev, weight_kg: next }));
   }
 
+  // ─── Добавление подхода (принимает явные значения — нет race condition) ───
   async function addSetWithValues(weight_kg_raw, reps_raw, rpe_raw) {
-    if (!selectedExercise) { alert('Выберите упражнение'); return; }
     const weight = parseNumberInput(weight_kg_raw);
-    const reps = parseInt(reps_raw, 10);
+    const reps   = parseInt(reps_raw, 10);
     const parsedRpe = parseNumberInput(rpe_raw);
-    const rpe = parsedRpe !== null && parsedRpe > 0 ? parsedRpe : null;
+    const rpe    = parsedRpe !== null && parsedRpe > 0 ? parsedRpe : null;
 
-    if (!weight_kg_raw || !reps_raw) { alert('Заполните вес и повторения'); return; }
-    if (weight === null || weight < 0) { alert('Вес должен быть ≥ 0'); return; }
-    if (isNaN(reps) || reps < 1) { alert('Повторения ≥ 1'); return; }
+    if (!weight_kg_raw || !reps_raw) { alert('Заполни вес и повторения'); return; }
+    if (weight === null || weight < 0) { alert('Вес ≥ 0 кг'); return; }
+    if (isNaN(reps) || reps < 1) { alert('Повторений ≥ 1'); return; }
     if (rpe !== null && (rpe < 1 || rpe > 10)) { alert('RPE от 1 до 10'); return; }
 
     const w = await ensureWorkoutCreated();
     if (!w) return;
 
     try {
-      const currentSets = sets.filter(s => s.exercise_id === selectedExercise.id);
-      const { data, error } = await supabase.from('sets').insert({
-        workout_id: w.id,
-        exercise_id: selectedExercise.id,
-        set_order: currentSets.length + 1,
-        weight_kg: weight, reps, rpe
-      }).select('*, exercises(name_ru, primary_muscle)').single();
+      const currentSetsForExercise = sets.filter(s => s.exercise_id === selectedExercise.id);
+
+      const { data, error } = await supabase
+        .from('sets')
+        .insert({
+          workout_id:  w.id,
+          exercise_id: selectedExercise.id,
+          set_order:   currentSetsForExercise.length + 1,
+          weight_kg:   weight,
+          reps,
+          rpe,
+        })
+        .select('*, exercises(name_ru, primary_muscle)')
+        .single();
 
       if (error) throw error;
-      setSets(prev => [...prev, data]);
 
-      setAutofillSuggestion({
-        id: 's-local', type: 'autofill',
-        payload: { weight_kg: data.weight_kg, reps: data.reps, rpe: data.rpe },
-        confidence: 0.9, explain: `последний подход: ${data.weight_kg}×${data.reps}`, sources: []
-      });
+      const newSets = [...sets, data];
+      setSets(newSets);
 
-      const nextIdx = currentSets.length;
-      if (pastSetsSuggestions.length > nextIdx) {
-        applySetToQuickForm(pastSetsSuggestions[nextIdx]);
-      } else {
-        setQuickSet(prev => ({ ...prev, reps: '', rpe: '' }));
+      // Запоминаем упражнение в списке тренировки (если первый раз)
+      if (!workoutExercises.find(e => e.id === selectedExercise.id)) {
+        setWorkoutExercises(prev => [...prev, selectedExercise]);
       }
+
+      // Автозаполнение следующего подхода из истории
+      advanceHistoryPrefill(currentSetsForExercise.length + 1);
     } catch (e) {
       console.error('Error adding set:', e);
       alert('Ошибка добавления подхода');
@@ -295,252 +424,309 @@ export default function LogWorkoutPage() {
   function handleAddSetFromHistory(set) {
     addSetWithValues(
       set.weight_kg != null ? String(set.weight_kg) : '',
-      set.reps != null ? String(set.reps) : '',
-      set.rpe != null ? String(set.rpe) : ''
+      set.reps      != null ? String(set.reps)      : '',
+      set.rpe       != null ? String(set.rpe)       : ''
     );
-  }
-
-  function handleAddAllFromDate(date) {
-    const dateSets = exerciseHistory[date] || [];
-    dateSets.forEach((s, i) => {
-      setTimeout(() => addSetWithValues(
-        s.weight_kg != null ? String(s.weight_kg) : '',
-        s.reps != null ? String(s.reps) : '',
-        s.rpe != null ? String(s.rpe) : ''
-      ), i * 150);
-    });
-  }
-
-  function fallbackSummary() {
-    return {
-      summary: 'Тренировка завершена',
-      highlights: [`Подходов: ${sets.length}`],
-      suggestions: ['Продолжайте фиксировать рабочие подходы для более точных рекомендаций']
-    };
   }
 
   async function finishWorkout() {
     if (finishingWorkout) return;
     if (sets.length === 0) { navigate('/'); return; }
     if (!workout?.id) return;
+
     try {
       setFinishingWorkout(true);
-      const { error } = await supabase.from('workouts')
-        .update({ end_time: new Date().toISOString() }).eq('id', workout.id);
-      if (error) throw error;
+      await supabase.from('workouts')
+        .update({ end_time: new Date().toISOString() })
+        .eq('id', workout.id);
+
+      let summary = null;
       try {
-        const summary = await requestSessionSummary({
+        summary = await requestSessionSummary({
           workoutId: workout.id,
-          recentSets: sets.map(s => ({ weight_kg: s.weight_kg, reps: s.reps, rpe: s.rpe }))
+          recentSets: sets.map(s => ({ weight_kg: s.weight_kg, reps: s.reps, rpe: s.rpe })),
         });
-        setSessionSummary(summary);
       } catch {
-        setSessionSummary(fallbackSummary());
+        summary = {
+          summary: `Отличная тренировка! ${sets.length} подходов, ${Math.round(
+            sets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0)
+          )} кг объёма.`,
+          highlights: [`Упражнений: ${workoutExercises.length}`, `Подходов: ${sets.length}`],
+          suggestions: [],
+        };
       }
+      setSessionSummary(summary);
       setShowSummaryModal(true);
     } catch (e) {
-      console.error('Error finishing workout:', e);
+      console.error('Error finishing:', e);
       alert('Ошибка завершения тренировки');
     } finally {
       setFinishingWorkout(false);
     }
   }
 
-  // ─── ФИКС: план всегда создаётся напрямую в Supabase ─────────────────────
-  // callToolsApi убран — tools сервер не задеплоен на Vercel
-  async function generateTrainingPlan() {
-    if (creatingPlan) return;
-    try {
-      setCreatingPlan(true);
-      const { error } = await supabase.from('workout_plans').insert({
-        user_id: SINGLE_USER_ID,
-        name: `AI План ${new Date().toLocaleDateString('ru-RU')}`,
-        description: sessionSummary?.summary || 'План создан после тренировки',
-        goal: 'strength',
-        days_per_week: 3,
-        duration_weeks: 8
-      }).select('id').single();
-      if (error) throw error;
-      alert('План успешно создан');
-    } catch (e) {
-      console.error('Create plan error:', e);
-      alert(`Ошибка создания плана: ${e.message}`);
-    } finally {
-      setCreatingPlan(false);
-    }
-  }
+  const totalVolume = Math.round(
+    sets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0)
+  );
 
-  function goToWorkoutDetails() {
-    setShowSummaryModal(false);
-    navigate(`/workouts/${workout.id}`);
-  }
-
-  const finishLabel = finishingWorkout ? 'Завершение...' : sets.length === 0 ? 'Отмена' : 'Завершить';
+  // Текущий индекс подхода для баннера
+  const currentHistoryIdx = selectedExerciseSets.length;
+  const showHistoryBanner = pastHistory && !loadingHistory && pastHistory.sets.length > 0;
 
   return (
     <div className="min-h-screen bg-dark-bg">
-      {/* Header */}
+
+      {/* ─── Header ─── */}
       <div className="bg-dark-surface border-b border-dark-border p-4 safe-top">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">Новая тренировка</h1>
             {sets.length > 0 && (
               <p className="text-xs text-dark-muted mt-0.5">
-                {sets.length} {sets.length === 1 ? 'подход' : sets.length < 5 ? 'подхода' : 'подходов'}
-                {` · ${Math.round(sets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0))} кг`}
+                {sets.length} подх. · {totalVolume.toLocaleString('ru')} кг объёма
               </p>
             )}
           </div>
-          <button onClick={finishWorkout} disabled={finishingWorkout} className="btn-primary flex items-center space-x-2">
-            <Save className="w-5 h-5" /><span>{finishLabel}</span>
+          <button
+            onClick={finishWorkout}
+            disabled={finishingWorkout}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            <span>
+              {finishingWorkout ? 'Завершение...' : sets.length === 0 ? 'Отмена' : 'Завершить'}
+            </span>
           </button>
         </div>
       </div>
 
+      {/* ─── Контент ─── */}
       {!selectedExercise ? (
-        <div className="p-4">
-          <button onClick={() => setShowExercisePicker(true)} className="w-full card-elevated py-8 text-center">
-            <Plus className="w-12 h-12 mx-auto text-primary-500 mb-3" />
-            <p className="font-medium">Выберите упражнение</p>
-            {sets.length > 0 && <p className="text-sm text-dark-muted mt-1">или завершите тренировку</p>}
+        <div className="p-4 space-y-4">
+
+          {/* Добавить упражнение */}
+          <button
+            onClick={() => setShowExercisePicker(true)}
+            className="w-full card-elevated py-8 text-center hover:border-primary-500/50 transition-all"
+          >
+            <Plus className="w-10 h-10 mx-auto text-primary-500 mb-2" />
+            <p className="font-medium">Выбрать упражнение</p>
+            {sets.length > 0 && (
+              <p className="text-sm text-dark-muted mt-1">или завершите тренировку</p>
+            )}
           </button>
 
-          {sets.length > 0 && (
-            <div className="mt-4 space-y-2">
-              <p className="text-sm text-dark-muted font-medium">В этой тренировке:</p>
-              {[...new Set(sets.map(s => s.exercise_id))].map(exId => {
-                const exSets = sets.filter(s => s.exercise_id === exId);
-                const exName = exSets[0]?.exercises?.name_ru || 'Упражнение';
-                const vol = exSets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0);
-                return (
-                  <div key={exId} className="card flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-sm">{exName}</p>
-                      <p className="text-xs text-dark-muted">{exSets.length} подходов · {Math.round(vol)} кг</p>
-                    </div>
-                    <button onClick={() => { const ex = exercises.find(e => e.id === exId); if (ex) setSelectedExercise(ex); }}
-                      className="text-xs text-primary-500 hover:text-primary-400">+ подход</button>
-                  </div>
-                );
-              })}
+          {/* Уже добавленные упражнения */}
+          {workoutExercises.length > 0 && (
+            <div>
+              <p className="text-xs text-dark-muted font-medium mb-2 px-1">В этой тренировке</p>
+              <div className="space-y-2">
+                {workoutExercises.map(ex => {
+                  const exSets = sets.filter(s => s.exercise_id === ex.id);
+                  const vol    = exSets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0);
+                  return (
+                    <button
+                      key={ex.id}
+                      onClick={() => setSelectedExercise(ex)}
+                      className="w-full card flex items-center gap-3 text-left hover:bg-dark-elevated transition-colors"
+                    >
+                      <Dumbbell className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{ex.name_ru}</p>
+                        <p className="text-xs text-dark-muted">
+                          {exSets.length} подходов · {Math.round(vol)} кг
+                        </p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-dark-muted" />
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
+
       ) : (
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-3">
+
+          {/* ─── Карточка выбранного упражнения ─── */}
           <div className="card">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Dumbbell className="w-6 h-6 text-primary-500" />
-                <div>
-                  <div className="font-semibold">{selectedExercise.name_ru}</div>
-                  <div className="text-sm text-dark-muted">{selectedExercise.primary_muscle}</div>
-                </div>
+            <div className="flex items-center gap-3">
+              <Dumbbell className="w-5 h-5 text-primary-500 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold">{selectedExercise.name_ru}</p>
+                <p className="text-xs text-dark-muted">{selectedExercise.primary_muscle}</p>
               </div>
-              <button onClick={() => setSelectedExercise(null)} className="p-2 hover:bg-dark-elevated rounded">
-                <X className="w-5 h-5" />
+              {/* Кнопка История */}
+              <button
+                onClick={() => setShowHistoryModal(true)}
+                className="flex items-center gap-1 text-xs text-dark-muted hover:text-primary-400
+                           bg-dark-elevated rounded-lg px-2.5 py-1.5 transition-colors"
+              >
+                <History className="w-3.5 h-3.5" />
+                История
+              </button>
+              <button
+                onClick={() => setSelectedExercise(null)}
+                className="p-1.5 hover:bg-dark-elevated rounded-lg transition-colors text-dark-muted"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          <div className="card">
-            <div className="text-sm font-medium mb-3">Быстрое добавление подхода</div>
+          {/* ─── Форма быстрого добавления ─── */}
+          <div className="card space-y-3">
+            <p className="text-sm font-medium">
+              Подход {selectedExerciseSets.length + 1}
+            </p>
 
-            {loadingPastSuggestions && (
-              <div className="mb-3 text-xs text-dark-muted">Загрузка истории...</div>
+            {/* Баннер истории */}
+            {loadingHistory && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-dark-elevated border border-dark-border">
+                <div className="w-3 h-3 rounded-full border-2 border-primary-400 border-t-transparent animate-spin" />
+                <p className="text-xs text-dark-muted">Загружаем историю...</p>
+              </div>
             )}
-            {!loadingPastSuggestions && pastSetsSuggestions.length > 0 && (
-              <div className="mb-4 p-3 border border-primary-500/30 rounded-lg bg-primary-500/5">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-sm font-medium">История упражнения</div>
-                  <div className="text-xs text-dark-muted">{pastSetsSuggestions.length} подходов</div>
-                </div>
-                {selectedExerciseSets.length < pastSetsSuggestions.length ? (
-                  <p className="text-xs text-dark-muted mb-2">
-                    Подход {selectedExerciseSets.length + 1}: {pastSetsSuggestions[selectedExerciseSets.length]?.weight_kg} кг × {pastSetsSuggestions[selectedExerciseSets.length]?.reps}
-                  </p>
-                ) : (
-                  <p className="text-xs text-dark-muted mb-2">Все подходы из истории использованы</p>
-                )}
-                <button type="button" onClick={() => setShowHistoryModal(true)} className="btn-secondary text-sm px-3 py-2">
-                  Показать историю
+
+            {showHistoryBanner && (
+              <HistoryBanner
+                date={pastHistory.date}
+                setsTotal={pastHistory.sets.length}
+                currentSetIndex={currentHistoryIdx}
+              />
+            )}
+
+            {/* Кнопки быстрого изменения */}
+            <div className="flex gap-2 flex-wrap">
+              {lastExerciseSet && (
+                <button
+                  type="button"
+                  onClick={() => setQuickSet({
+                    weight_kg: formatWeightValue(lastExerciseSet.weight_kg),
+                    reps:      String(lastExerciseSet.reps),
+                    rpe:       lastExerciseSet.rpe != null ? String(lastExerciseSet.rpe) : '',
+                  })}
+                  className="btn-secondary text-xs px-3 py-1.5"
+                >
+                  Повторить
                 </button>
-              </div>
-            )}
-
-            {!loadingSuggestion && autofillSuggestion && (
-              <div className="mb-3">
-                <SuggestionPill suggestion={autofillSuggestion} onApply={applySetToQuickForm} />
-              </div>
-            )}
-
-            <div className="flex flex-wrap gap-2 mb-3">
-              <button type="button" onClick={repeatLastSet} disabled={!lastExerciseSet} className="btn-secondary text-sm px-3 py-2">Повторить</button>
-              <button type="button" onClick={() => adjustWeight(1.05)} disabled={!canChangeWeight} className="btn-secondary text-sm px-3 py-2">+5%</button>
-              <button type="button" onClick={() => adjustWeight(0.95)} disabled={!canChangeWeight} className="btn-secondary text-sm px-3 py-2">-5%</button>
+              )}
+              <button
+                type="button"
+                onClick={() => adjustWeight(1.05)}
+                disabled={!canChangeWeight}
+                className="btn-secondary text-xs px-3 py-1.5"
+              >
+                +5%
+              </button>
+              <button
+                type="button"
+                onClick={() => adjustWeight(0.95)}
+                disabled={!canChangeWeight}
+                className="btn-secondary text-xs px-3 py-1.5"
+              >
+                −5%
+              </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 mb-3">
+            {/* Поля ввода */}
+            <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="text-xs text-dark-muted">Вес (кг)</label>
-                <input type="number" value={quickSet.weight_kg}
+                <label className="text-xs text-dark-muted mb-1 block">Вес, кг</label>
+                <input
+                  type="number"
+                  value={quickSet.weight_kg}
                   onChange={e => setQuickSet(p => ({ ...p, weight_kg: e.target.value }))}
-                  className="input-field w-full mt-1" placeholder="100" step="0.5" min="0" />
+                  className="input-field w-full"
+                  placeholder="100"
+                  step="0.5"
+                  min="0"
+                  inputMode="decimal"
+                />
               </div>
               <div>
-                <label className="text-xs text-dark-muted">Повторения</label>
-                <input type="number" value={quickSet.reps}
+                <label className="text-xs text-dark-muted mb-1 block">Повторения</label>
+                <input
+                  type="number"
+                  value={quickSet.reps}
                   onChange={e => setQuickSet(p => ({ ...p, reps: e.target.value }))}
-                  className="input-field w-full mt-1" placeholder="10" min="1" />
+                  className="input-field w-full"
+                  placeholder="10"
+                  min="1"
+                  inputMode="numeric"
+                />
               </div>
               <div>
-                <label className="text-xs text-dark-muted">RPE</label>
-                <input type="number" value={quickSet.rpe}
+                <label className="text-xs text-dark-muted mb-1 block">RPE</label>
+                <input
+                  type="number"
+                  value={quickSet.rpe}
                   onChange={e => setQuickSet(p => ({ ...p, rpe: e.target.value }))}
-                  className="input-field w-full mt-1" placeholder="опц." min="0" max="10" step="0.5" />
+                  className="input-field w-full"
+                  placeholder="—"
+                  min="1"
+                  max="10"
+                  step="0.5"
+                  inputMode="decimal"
+                />
               </div>
             </div>
 
-            <button onClick={addSet} disabled={workoutCreating} className="btn-primary w-full">
-              <Plus className="w-5 h-5 inline mr-2" />
+            <button
+              onClick={addSet}
+              disabled={workoutCreating}
+              className="btn-primary w-full"
+            >
+              <Plus className="w-4 h-4 inline mr-1.5" />
               {workoutCreating ? 'Создаём тренировку...' : 'Добавить подход'}
             </button>
           </div>
 
-          <div className="space-y-2">
-            {selectedExerciseSets.map((set, idx) => (
-              <div key={set.id} className="card flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <div className="text-dark-muted font-mono text-sm">#{idx + 1}</div>
-                  <div>
-                    <div className="font-semibold">{set.weight_kg} кг × {set.reps}</div>
-                    {set.rpe && <div className="text-sm text-dark-muted">RPE: {set.rpe}</div>}
-                  </div>
-                </div>
-                <div className="text-xs text-dark-muted">
-                  {Math.round((parseFloat(set.weight_kg) || 0) * (set.reps || 0))} кг
-                </div>
+          {/* ─── Список добавленных подходов ─── */}
+          {selectedExerciseSets.length > 0 && (
+            <div className="space-y-2">
+              {selectedExerciseSets.map((set, idx) => (
+                <SetCard
+                  key={set.id}
+                  set={set}
+                  index={idx}
+                  isFromHistory={idx > 0}
+                />
+              ))}
+              <div className="text-right text-xs text-dark-muted pr-1">
+                Объём: {Math.round(
+                  selectedExerciseSets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0)
+                ).toLocaleString('ru')} кг
               </div>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Exercise Picker */}
+      {/* ─── Пикер упражнений ─── */}
       {showExercisePicker && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center">
           <div className="bg-dark-surface w-full sm:max-w-lg sm:rounded-xl max-h-[80vh] overflow-hidden">
             <div className="p-4 border-b border-dark-border flex items-center justify-between">
               <h2 className="font-semibold">Выбрать упражнение</h2>
-              <button onClick={() => setShowExercisePicker(false)} className="p-2"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowExercisePicker(false)} className="p-2 text-dark-muted">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="overflow-y-auto max-h-[60vh] p-4 space-y-2">
+            <div className="overflow-y-auto max-h-[60vh] p-3 space-y-1">
               {exercises.map(exercise => (
-                <button key={exercise.id}
-                  onClick={() => { setSelectedExercise(exercise); setAutofillSuggestion(null); setShowExercisePicker(false); }}
-                  className="w-full card hover:bg-dark-elevated transition-colors text-left">
-                  <div className="font-medium">{exercise.name_ru}</div>
-                  <div className="text-sm text-dark-muted">{exercise.primary_muscle}</div>
+                <button
+                  key={exercise.id}
+                  onClick={() => {
+                    setSelectedExercise(exercise);
+                    setQuickSet({ weight_kg: '', reps: '', rpe: '' });
+                    setShowExercisePicker(false);
+                  }}
+                  className="w-full card hover:bg-dark-elevated transition-colors text-left py-3"
+                >
+                  <p className="font-medium">{exercise.name_ru}</p>
+                  <p className="text-xs text-dark-muted">{exercise.primary_muscle}</p>
                 </button>
               ))}
             </div>
@@ -548,37 +734,61 @@ export default function LogWorkoutPage() {
         </div>
       )}
 
-      {/* Summary Modal */}
+      {/* ─── Модал итога тренировки ─── */}
       {showSummaryModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center">
           <div className="bg-dark-surface w-full sm:max-w-xl sm:rounded-xl border border-dark-border overflow-hidden">
-            <div className="p-4 border-b border-dark-border">
-              <h2 className="text-lg font-semibold">🏋️ Итог тренировки</h2>
+            <div className="p-4 border-b border-dark-border flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Тренировка завершена 🏋️</h2>
             </div>
             <div className="p-4 space-y-4">
-              <p className="text-sm">{sessionSummary?.summary || 'Тренировка завершена'}</p>
+
+              {/* Статы */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-dark-elevated rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold">{sets.length}</p>
+                  <p className="text-xs text-dark-muted">подходов</p>
+                </div>
+                <div className="bg-dark-elevated rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold">{workoutExercises.length}</p>
+                  <p className="text-xs text-dark-muted">упражнений</p>
+                </div>
+                <div className="bg-dark-elevated rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold">
+                    {totalVolume >= 1000
+                      ? `${(totalVolume / 1000).toFixed(1)}т`
+                      : totalVolume}
+                  </p>
+                  <p className="text-xs text-dark-muted">объём</p>
+                </div>
+              </div>
+
+              {sessionSummary?.summary && (
+                <p className="text-sm text-dark-muted">{sessionSummary.summary}</p>
+              )}
+
               {sessionSummary?.highlights?.length > 0 && (
                 <div>
-                  <div className="text-sm font-medium mb-2">Highlights</div>
-                  {sessionSummary.highlights.map((item, i) => (
-                    <div key={i} className="text-sm text-dark-muted">• {item}</div>
+                  <p className="text-sm font-medium mb-1">Итоги</p>
+                  {sessionSummary.highlights.map((h, i) => (
+                    <p key={i} className="text-sm text-dark-muted">· {h}</p>
                   ))}
                 </div>
               )}
-              {sessionSummary?.suggestions?.length > 0 && (
-                <div>
-                  <div className="text-sm font-medium mb-2">Рекомендации</div>
-                  {sessionSummary.suggestions.map((item, i) => (
-                    <div key={i} className="text-sm text-dark-muted">• {item}</div>
-                  ))}
-                </div>
-              )}
-              <div className="flex flex-col sm:flex-row gap-2">
-                <button type="button" onClick={generateTrainingPlan} disabled={creatingPlan} className="btn-primary flex-1">
-                  {creatingPlan ? 'Создаём план...' : 'Сгенерировать план'}
+
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => { setShowSummaryModal(false); setShowTemplateModal(true); }}
+                  className="btn-secondary w-full flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  Сохранить как шаблон
                 </button>
-                <button type="button" onClick={goToWorkoutDetails} className="btn-secondary flex-1">
-                  К деталям
+                <button
+                  onClick={() => navigate(`/workouts/${workout.id}`)}
+                  className="btn-primary w-full"
+                >
+                  Смотреть детали
                 </button>
               </div>
             </div>
@@ -586,13 +796,41 @@ export default function LogWorkoutPage() {
         </div>
       )}
 
+      {/* ─── Модал сохранения шаблона ─── */}
+      {showTemplateModal && (
+        <SaveTemplateModal
+          exercises={workoutExercises}
+          sets={sets}
+          onSave={(planId) => {
+            setShowTemplateModal(false);
+            navigate(`/workouts/${workout.id}`);
+          }}
+          onSkip={() => {
+            setShowTemplateModal(false);
+            navigate(`/workouts/${workout.id}`);
+          }}
+        />
+      )}
+
+      {/* ─── История упражнения ─── */}
       <ExerciseHistoryModal
         isOpen={showHistoryModal}
         onClose={() => setShowHistoryModal(false)}
         exerciseName={selectedExercise?.name_ru}
-        history={exerciseHistory}
+        history={fullHistory}
         onAddSet={handleAddSetFromHistory}
-        onAddAllFromDate={handleAddAllFromDate}
+        onAddAllFromDate={(date) => {
+          const dateSets = fullHistory[date] || [];
+          dateSets.forEach((s, i) => {
+            setTimeout(() => {
+              addSetWithValues(
+                s.weight_kg != null ? String(s.weight_kg) : '',
+                s.reps      != null ? String(s.reps)      : '',
+                s.rpe       != null ? String(s.rpe)       : ''
+              );
+            }, i * 200);
+          });
+        }}
       />
     </div>
   );
