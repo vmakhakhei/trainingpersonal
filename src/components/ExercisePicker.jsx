@@ -7,23 +7,23 @@ import { Search, X, ChevronRight, Check, RotateCcw } from 'lucide-react';
 // Конфиг мышечных групп
 // ─────────────────────────────────────────────────────────────────────────────
 const MUSCLES = {
-  chest: { ru: 'Грудь', color: '#ef4444', primary: 'chest' },
-  front_delt: { ru: 'Передняя дельта', color: '#f59e0b', primary: 'shoulders' },
-  mid_delt: { ru: 'Средняя дельта', color: '#f59e0b', primary: 'shoulders' },
-  rear_delt: { ru: 'Задняя дельта', color: '#d97706', primary: 'shoulders' },
-  biceps: { ru: 'Бицепс', color: '#8b5cf6', primary: 'arms' },
-  triceps: { ru: 'Трицепс', color: '#7c3aed', primary: 'arms' },
-  forearm: { ru: 'Предплечье', color: '#6d28d9', primary: 'arms' },
-  abs: { ru: 'Пресс', color: '#06b6d4', primary: 'core' },
-  obliques: { ru: 'Косые', color: '#0891b2', primary: 'core' },
-  upper_back: { ru: 'Верхняя спина', color: '#3b82f6', primary: 'back' },
-  lats: { ru: 'Широчайшие', color: '#2563eb', primary: 'back' },
-  traps: { ru: 'Трапеция', color: '#60a5fa', primary: 'back' },
-  lower_back: { ru: 'Поясница', color: '#1d4ed8', primary: 'back' },
-  glutes: { ru: 'Ягодицы', color: '#ec4899', primary: 'glutes' },
-  quads: { ru: 'Квадрицепс', color: '#10b981', primary: 'legs' },
-  hamstrings: { ru: 'Бицепс бедра', color: '#059669', primary: 'legs' },
-  calves: { ru: 'Икры', color: '#047857', primary: 'legs' },
+  chest:     { ru: 'Грудь',          color: '#ef4444', primary: 'chest' },
+  front_delt:{ ru: 'Передняя дельта',color: '#f59e0b', primary: 'shoulders' },
+  mid_delt:  { ru: 'Средняя дельта', color: '#f59e0b', primary: 'shoulders' },
+  rear_delt: { ru: 'Задняя дельта',  color: '#d97706', primary: 'shoulders' },
+  biceps:    { ru: 'Бицепс',         color: '#8b5cf6', primary: 'arms' },
+  triceps:   { ru: 'Трицепс',        color: '#7c3aed', primary: 'arms' },
+  forearm:   { ru: 'Предплечье',     color: '#6d28d9', primary: 'arms' },
+  abs:       { ru: 'Пресс',          color: '#06b6d4', primary: 'core' },
+  obliques:  { ru: 'Косые',          color: '#0891b2', primary: 'core' },
+  upper_back:{ ru: 'Верхняя спина',  color: '#3b82f6', primary: 'back' },
+  lats:      { ru: 'Широчайшие',     color: '#2563eb', primary: 'back' },
+  traps:     { ru: 'Трапеция',       color: '#60a5fa', primary: 'back' },
+  lower_back:{ ru: 'Поясница',       color: '#1d4ed8', primary: 'back' },
+  glutes:    { ru: 'Ягодицы',        color: '#ec4899', primary: 'glutes' },
+  quads:     { ru: 'Квадрицепс',     color: '#10b981', primary: 'legs' },
+  hamstrings:{ ru: 'Бицепс бедра',   color: '#059669', primary: 'legs' },
+  calves:    { ru: 'Икры',           color: '#047857', primary: 'legs' },
 };
 
 // muscle_detail из БД → ключи в MUSCLES
@@ -49,17 +49,17 @@ const PRIMARY_TO_MUSCLES = {
 };
 
 const EQUIPMENT_LABELS = {
-  barbell: 'Штанга', dumbbell: 'Гантели', cable: 'Блок',
-  machine: 'Тренажёр', bodyweight: 'Тело', kettlebell: 'Гиря', band: 'Резина',
+  barbell:'Штанга', dumbbell:'Гантели', cable:'Блок',
+  machine:'Тренажёр', bodyweight:'Тело', kettlebell:'Гиря', band:'Резина',
 };
 const EQUIPMENT_COLORS = {
-  barbell: 'bg-orange-500/15 text-orange-300 border-orange-500/20',
-  dumbbell: 'bg-blue-500/15 text-blue-300 border-blue-500/20',
-  cable: 'bg-purple-500/15 text-purple-300 border-purple-500/20',
-  machine: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/20',
-  bodyweight: 'bg-green-500/15 text-green-300 border-green-500/20',
-  kettlebell: 'bg-red-500/15 text-red-300 border-red-500/20',
-  band: 'bg-pink-500/15 text-pink-300 border-pink-500/20',
+  barbell:   'bg-orange-500/15 text-orange-300 border-orange-500/20',
+  dumbbell:  'bg-blue-500/15 text-blue-300 border-blue-500/20',
+  cable:     'bg-purple-500/15 text-purple-300 border-purple-500/20',
+  machine:   'bg-yellow-500/15 text-yellow-300 border-yellow-500/20',
+  bodyweight:'bg-green-500/15 text-green-300 border-green-500/20',
+  kettlebell:'bg-red-500/15 text-red-300 border-red-500/20',
+  band:      'bg-pink-500/15 text-pink-300 border-pink-500/20',
 };
 
 function getMuscleKeys(ex) {
@@ -70,113 +70,152 @@ function getMuscleKeys(ex) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SVG ТЕЛО — ПЕРЕДНИЙ ВИД
-// viewBox="0 0 120 280"
+// Три чётких состояния каждой мышцы:
+//   INACTIVE  — нет упражнений: тёмный фон, почти невидимый
+//   AVAILABLE — есть упражнения, не выбрана: цветная подсветка, пунктирная обводка
+//   ACTIVE    — выбрана: полный цвет, яркое свечение (glow-filter) + анимация
+// ─────────────────────────────────────────────────────────────────────────────
+
+function muscleState(key, activeMuscles, hasExercises) {
+  if (activeMuscles.has(key)) return 'active';
+  if (hasExercises.has(key)) return 'available';
+  return 'inactive';
+}
+
+function muscleFill(key, state) {
+  const c = MUSCLES[key].color;
+  if (state === 'active')    return c;
+  if (state === 'available') return `${c}30`;
+  return '#111128';
+}
+
+function muscleStroke(key, state) {
+  const c = MUSCLES[key].color;
+  if (state === 'active')    return c;
+  if (state === 'available') return `${c}aa`;
+  return '#1e1e38';
+}
+
+function muscleStrokeW(state) {
+  if (state === 'active')    return '1.5';
+  if (state === 'available') return '1';
+  return '0.5';
+}
+
+function muscleFilter(state) {
+  return state === 'active' ? 'url(#glow)' : 'none';
+}
+
+function muscleStrokeDash(state) {
+  return state === 'available' ? '2 1.5' : 'none';
+}
+
+function muscleCls(state) {
+  if (state === 'inactive') return 'cursor-default opacity-40';
+  return 'cursor-pointer transition-all duration-200 hover:brightness-125 hover:saturate-150';
+}
+
+// Shared SVG defs (glow filter + pulse animation)
+function SvgDefs() {
+  return (
+    <defs>
+      <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+      <style>{`
+        @keyframes muscle-pulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.7; }
+        }
+        .m-active {
+          animation: muscle-pulse 1.8s ease-in-out infinite;
+        }
+      `}</style>
+    </defs>
+  );
+}
+
+// Хелпер: пропсы пути по состоянию
+function mp(key, activeMuscles, hasExercises, onClick) {
+  const state = muscleState(key, activeMuscles, hasExercises);
+  return {
+    fill:            muscleFill(key, state),
+    stroke:          muscleStroke(key, state),
+    strokeWidth:     muscleStrokeW(state),
+    strokeDasharray: muscleStrokeDash(state),
+    filter:          muscleFilter(state),
+    className:       muscleCls(state) + (state === 'active' ? ' m-active' : ''),
+    onClick:         state !== 'inactive' ? () => onClick(key) : undefined,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SVG ТЕЛО — ПЕРЕДНИЙ ВИД  viewBox="0 0 120 280"
 // ─────────────────────────────────────────────────────────────────────────────
 function BodyFront({ activeMuscles, hasExercises, onMuscleClick }) {
-  function fill(key) {
-    if (activeMuscles.has(key)) return MUSCLES[key].color;
-    if (hasExercises.has(key)) return `${MUSCLES[key].color}55`;
-    return '#2a2a45';
-  }
-  function stroke(key) {
-    return activeMuscles.has(key) ? MUSCLES[key].color : '#3a3a60';
-  }
-  function cls(key) {
-    return 'cursor-pointer transition-all duration-150 hover:opacity-80';
-  }
+  const p = (key) => mp(key, activeMuscles, hasExercises, onMuscleClick);
 
   return (
     <svg viewBox="0 0 120 280" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%' }}>
+      <SvgDefs/>
       {/* Голова */}
-      <ellipse cx="60" cy="18" rx="13" ry="16" fill="#1e1e35" stroke="#3a3a60" strokeWidth="1" />
+      <ellipse cx="60" cy="18" rx="13" ry="16" fill="#1a1a32" stroke="#252540" strokeWidth="0.8"/>
       {/* Шея */}
-      <rect x="54" y="32" width="12" height="10" rx="3" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
+      <rect x="54" y="32" width="12" height="10" rx="3" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
 
-      {/* Трапеция (front) */}
-      <path d="M44 42 L60 38 L76 42 L72 52 L60 50 L48 52 Z"
-        fill={fill('traps')} stroke={stroke('traps')} strokeWidth="0.8"
-        className={cls('traps')} onClick={() => onMuscleClick('traps')} />
+      {/* Трапеция */}
+      <path d="M44 42 L60 38 L76 42 L72 52 L60 50 L48 52 Z" {...p('traps')}/>
 
-      {/* Передняя дельта Л */}
-      <path d="M36 44 L44 42 L48 52 L42 62 L34 56 Z"
-        fill={fill('front_delt')} stroke={stroke('front_delt')} strokeWidth="0.8"
-        className={cls('front_delt')} onClick={() => onMuscleClick('front_delt')} />
-      {/* Передняя дельта П */}
-      <path d="M84 44 L76 42 L72 52 L78 62 L86 56 Z"
-        fill={fill('front_delt')} stroke={stroke('front_delt')} strokeWidth="0.8"
-        className={cls('front_delt')} onClick={() => onMuscleClick('front_delt')} />
+      {/* Передняя дельта Л/П */}
+      <path d="M36 44 L44 42 L48 52 L42 62 L34 56 Z" {...p('front_delt')}/>
+      <path d="M84 44 L76 42 L72 52 L78 62 L86 56 Z" {...p('front_delt')}/>
 
       {/* Грудь */}
-      <path d="M48 52 L60 50 L72 52 L70 72 L60 74 L50 72 Z"
-        fill={fill('chest')} stroke={stroke('chest')} strokeWidth="0.8"
-        className={cls('chest')} onClick={() => onMuscleClick('chest')} />
+      <path d="M48 52 L60 50 L72 52 L70 72 L60 74 L50 72 Z" {...p('chest')}/>
 
-      {/* Бицепс Л */}
-      <path d="M34 56 L42 62 L40 80 L32 76 Z"
-        fill={fill('biceps')} stroke={stroke('biceps')} strokeWidth="0.8"
-        className={cls('biceps')} onClick={() => onMuscleClick('biceps')} />
-      {/* Бицепс П */}
-      <path d="M86 56 L78 62 L80 80 L88 76 Z"
-        fill={fill('biceps')} stroke={stroke('biceps')} strokeWidth="0.8"
-        className={cls('biceps')} onClick={() => onMuscleClick('biceps')} />
+      {/* Бицепс Л/П */}
+      <path d="M34 56 L42 62 L40 80 L32 76 Z" {...p('biceps')}/>
+      <path d="M86 56 L78 62 L80 80 L88 76 Z" {...p('biceps')}/>
 
-      {/* Предплечье Л */}
-      <path d="M32 76 L40 80 L38 98 L30 94 Z"
-        fill={fill('forearm')} stroke={stroke('forearm')} strokeWidth="0.8"
-        className={cls('forearm')} onClick={() => onMuscleClick('forearm')} />
-      {/* Предплечье П */}
-      <path d="M88 76 L80 80 L82 98 L90 94 Z"
-        fill={fill('forearm')} stroke={stroke('forearm')} strokeWidth="0.8"
-        className={cls('forearm')} onClick={() => onMuscleClick('forearm')} />
+      {/* Предплечье Л/П */}
+      <path d="M32 76 L40 80 L38 98 L30 94 Z" {...p('forearm')}/>
+      <path d="M88 76 L80 80 L82 98 L90 94 Z" {...p('forearm')}/>
 
       {/* Кисти */}
-      <ellipse cx="31" cy="102" rx="6" ry="8" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
-      <ellipse cx="89" cy="102" rx="6" ry="8" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
+      <ellipse cx="31" cy="102" rx="6" ry="8" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
+      <ellipse cx="89" cy="102" rx="6" ry="8" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
 
       {/* Пресс */}
-      <path d="M50 72 L60 74 L70 72 L68 110 L60 112 L52 110 Z"
-        fill={fill('abs')} stroke={stroke('abs')} strokeWidth="0.8"
-        className={cls('abs')} onClick={() => onMuscleClick('abs')} />
-      {/* Линия пресса */}
-      <line x1="60" y1="74" x2="60" y2="112" stroke={stroke('abs')} strokeWidth="0.5" strokeDasharray="2,2" />
-      <line x1="51" y1="85" x2="69" y2="85" stroke={stroke('abs')} strokeWidth="0.5" strokeDasharray="2,2" />
-      <line x1="51" y1="97" x2="69" y2="97" stroke={stroke('abs')} strokeWidth="0.5" strokeDasharray="2,2" />
+      <path d="M50 72 L60 74 L70 72 L68 110 L60 112 L52 110 Z" {...p('abs')}/>
+      {/* Сетка пресса поверх */}
+      <line x1="60" y1="74" x2="60" y2="112" stroke="#ffffff08" strokeWidth="0.7"/>
+      <line x1="51" y1="85" x2="69" y2="85" stroke="#ffffff08" strokeWidth="0.7"/>
+      <line x1="51" y1="97" x2="69" y2="97" stroke="#ffffff08" strokeWidth="0.7"/>
 
-      {/* Косые Л */}
-      <path d="M42 68 L50 72 L52 110 L44 108 L38 80 Z"
-        fill={fill('obliques')} stroke={stroke('obliques')} strokeWidth="0.8"
-        className={cls('obliques')} onClick={() => onMuscleClick('obliques')} />
-      {/* Косые П */}
-      <path d="M78 68 L70 72 L68 110 L76 108 L82 80 Z"
-        fill={fill('obliques')} stroke={stroke('obliques')} strokeWidth="0.8"
-        className={cls('obliques')} onClick={() => onMuscleClick('obliques')} />
+      {/* Косые Л/П */}
+      <path d="M42 68 L50 72 L52 110 L44 108 L38 80 Z" {...p('obliques')}/>
+      <path d="M78 68 L70 72 L68 110 L76 108 L82 80 Z" {...p('obliques')}/>
 
-      {/* Квадрицепс Л */}
-      <path d="M44 112 L60 112 L58 162 L46 162 Z"
-        fill={fill('quads')} stroke={stroke('quads')} strokeWidth="0.8"
-        className={cls('quads')} onClick={() => onMuscleClick('quads')} />
-      {/* Квадрицепс П */}
-      <path d="M76 112 L60 112 L62 162 L74 162 Z"
-        fill={fill('quads')} stroke={stroke('quads')} strokeWidth="0.8"
-        className={cls('quads')} onClick={() => onMuscleClick('quads')} />
+      {/* Квадрицепс Л/П */}
+      <path d="M44 112 L60 112 L58 162 L46 162 Z" {...p('quads')}/>
+      <path d="M76 112 L60 112 L62 162 L74 162 Z" {...p('quads')}/>
 
       {/* Колени */}
-      <ellipse cx="51" cy="166" rx="8" ry="6" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
-      <ellipse cx="69" cy="166" rx="8" ry="6" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
+      <ellipse cx="51" cy="166" rx="8" ry="5" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
+      <ellipse cx="69" cy="166" rx="8" ry="5" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
 
-      {/* Икры Л (спереди видно немного) */}
-      <path d="M46 172 L57 172 L56 210 L47 210 Z"
-        fill={fill('calves')} stroke={stroke('calves')} strokeWidth="0.8"
-        className={cls('calves')} onClick={() => onMuscleClick('calves')} />
-      {/* Икры П */}
-      <path d="M74 172 L63 172 L64 210 L73 210 Z"
-        fill={fill('calves')} stroke={stroke('calves')} strokeWidth="0.8"
-        className={cls('calves')} onClick={() => onMuscleClick('calves')} />
+      {/* Икры Л/П */}
+      <path d="M46 172 L57 172 L56 210 L47 210 Z" {...p('calves')}/>
+      <path d="M74 172 L63 172 L64 210 L73 210 Z" {...p('calves')}/>
 
-      {/* Лодыжки/ступни */}
-      <ellipse cx="51" cy="215" rx="7" ry="5" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
-      <ellipse cx="69" cy="215" rx="7" ry="5" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
+      {/* Ступни */}
+      <ellipse cx="51" cy="215" rx="7" ry="5" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
+      <ellipse cx="69" cy="215" rx="7" ry="5" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
     </svg>
   );
 }
@@ -185,108 +224,63 @@ function BodyFront({ activeMuscles, hasExercises, onMuscleClick }) {
 // SVG ТЕЛО — ЗАДНИЙ ВИД
 // ─────────────────────────────────────────────────────────────────────────────
 function BodyBack({ activeMuscles, hasExercises, onMuscleClick }) {
-  function fill(key) {
-    if (activeMuscles.has(key)) return MUSCLES[key].color;
-    if (hasExercises.has(key)) return `${MUSCLES[key].color}55`;
-    return '#2a2a45';
-  }
-  function stroke(key) {
-    return activeMuscles.has(key) ? MUSCLES[key].color : '#3a3a60';
-  }
-  function cls() { return 'cursor-pointer transition-all duration-150 hover:opacity-80'; }
+  const p = (key) => mp(key, activeMuscles, hasExercises, onMuscleClick);
 
   return (
     <svg viewBox="0 0 120 280" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%' }}>
+      <SvgDefs/>
       {/* Голова */}
-      <ellipse cx="60" cy="18" rx="13" ry="16" fill="#1e1e35" stroke="#3a3a60" strokeWidth="1" />
+      <ellipse cx="60" cy="18" rx="13" ry="16" fill="#1a1a32" stroke="#252540" strokeWidth="0.8"/>
       {/* Шея */}
-      <rect x="54" y="32" width="12" height="10" rx="3" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
+      <rect x="54" y="32" width="12" height="10" rx="3" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
 
       {/* Трапеция */}
-      <path d="M42 42 L60 36 L78 42 L74 58 L60 54 L46 58 Z"
-        fill={fill('traps')} stroke={stroke('traps')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('traps')} />
+      <path d="M42 42 L60 36 L78 42 L74 58 L60 54 L46 58 Z" {...p('traps')}/>
 
-      {/* Задняя дельта Л */}
-      <path d="M34 46 L42 42 L46 58 L38 68 L30 58 Z"
-        fill={fill('rear_delt')} stroke={stroke('rear_delt')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('rear_delt')} />
-      {/* Задняя дельта П */}
-      <path d="M86 46 L78 42 L74 58 L82 68 L90 58 Z"
-        fill={fill('rear_delt')} stroke={stroke('rear_delt')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('rear_delt')} />
+      {/* Задняя дельта Л/П */}
+      <path d="M34 46 L42 42 L46 58 L38 68 L30 58 Z" {...p('rear_delt')}/>
+      <path d="M86 46 L78 42 L74 58 L82 68 L90 58 Z" {...p('rear_delt')}/>
 
       {/* Верхняя спина / ромбовидные */}
-      <path d="M46 58 L60 54 L74 58 L72 76 L60 78 L48 76 Z"
-        fill={fill('upper_back')} stroke={stroke('upper_back')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('upper_back')} />
+      <path d="M46 58 L60 54 L74 58 L72 76 L60 78 L48 76 Z" {...p('upper_back')}/>
 
-      {/* Широчайшие Л */}
-      <path d="M38 68 L46 58 L48 76 L46 106 L36 96 L32 76 Z"
-        fill={fill('lats')} stroke={stroke('lats')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('lats')} />
-      {/* Широчайшие П */}
-      <path d="M82 68 L74 58 L72 76 L74 106 L84 96 L88 76 Z"
-        fill={fill('lats')} stroke={stroke('lats')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('lats')} />
+      {/* Широчайшие Л/П */}
+      <path d="M38 68 L46 58 L48 76 L46 106 L36 96 L32 76 Z" {...p('lats')}/>
+      <path d="M82 68 L74 58 L72 76 L74 106 L84 96 L88 76 Z" {...p('lats')}/>
 
-      {/* Трицепс Л */}
-      <path d="M30 58 L38 68 L36 86 L28 80 Z"
-        fill={fill('triceps')} stroke={stroke('triceps')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('triceps')} />
-      {/* Трицепс П */}
-      <path d="M90 58 L82 68 L84 86 L92 80 Z"
-        fill={fill('triceps')} stroke={stroke('triceps')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('triceps')} />
+      {/* Трицепс Л/П */}
+      <path d="M30 58 L38 68 L36 86 L28 80 Z" {...p('triceps')}/>
+      <path d="M90 58 L82 68 L84 86 L92 80 Z" {...p('triceps')}/>
 
-      {/* Предплечье сзади Л */}
-      <path d="M28 80 L36 86 L34 100 L26 96 Z"
-        fill={fill('forearm')} stroke={stroke('forearm')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('forearm')} />
-      {/* Предплечье сзади П */}
-      <path d="M92 80 L84 86 L86 100 L94 96 Z"
-        fill={fill('forearm')} stroke={stroke('forearm')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('forearm')} />
+      {/* Предплечье Л/П */}
+      <path d="M28 80 L36 86 L34 100 L26 96 Z" {...p('forearm')}/>
+      <path d="M92 80 L84 86 L86 100 L94 96 Z" {...p('forearm')}/>
 
       {/* Кисти */}
-      <ellipse cx="27" cy="104" rx="6" ry="8" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
-      <ellipse cx="93" cy="104" rx="6" ry="8" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
+      <ellipse cx="27" cy="104" rx="6" ry="8" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
+      <ellipse cx="93" cy="104" rx="6" ry="8" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
 
       {/* Поясница */}
-      <path d="M48 76 L60 78 L72 76 L72 110 L60 112 L48 110 Z"
-        fill={fill('lower_back')} stroke={stroke('lower_back')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('lower_back')} />
+      <path d="M48 76 L60 78 L72 76 L72 110 L60 112 L48 110 Z" {...p('lower_back')}/>
 
       {/* Ягодицы */}
-      <path d="M46 108 L60 112 L74 108 L74 138 L60 142 L46 138 Z"
-        fill={fill('glutes')} stroke={stroke('glutes')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('glutes')} />
+      <path d="M46 108 L60 112 L74 108 L74 138 L60 142 L46 138 Z" {...p('glutes')}/>
 
-      {/* Бицепс бедра Л */}
-      <path d="M46 138 L60 142 L58 172 L44 170 Z"
-        fill={fill('hamstrings')} stroke={stroke('hamstrings')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('hamstrings')} />
-      {/* Бицепс бедра П */}
-      <path d="M74 138 L60 142 L62 172 L76 170 Z"
-        fill={fill('hamstrings')} stroke={stroke('hamstrings')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('hamstrings')} />
+      {/* Бицепс бедра Л/П */}
+      <path d="M46 138 L60 142 L58 172 L44 170 Z" {...p('hamstrings')}/>
+      <path d="M74 138 L60 142 L62 172 L76 170 Z" {...p('hamstrings')}/>
 
       {/* Колени */}
-      <ellipse cx="50" cy="175" rx="8" ry="5" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
-      <ellipse cx="70" cy="175" rx="8" ry="5" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
+      <ellipse cx="50" cy="175" rx="8" ry="5" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
+      <ellipse cx="70" cy="175" rx="8" ry="5" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
 
-      {/* Икры Л */}
-      <path d="M44 180 L57 180 L55 216 L44 214 Z"
-        fill={fill('calves')} stroke={stroke('calves')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('calves')} />
-      {/* Икры П */}
-      <path d="M76 180 L63 180 L65 216 L76 214 Z"
-        fill={fill('calves')} stroke={stroke('calves')} strokeWidth="0.8"
-        className={cls()} onClick={() => onMuscleClick('calves')} />
+      {/* Икры Л/П */}
+      <path d="M44 180 L57 180 L55 216 L44 214 Z" {...p('calves')}/>
+      <path d="M76 180 L63 180 L65 216 L76 214 Z" {...p('calves')}/>
 
       {/* Ступни */}
-      <ellipse cx="50" cy="220" rx="7" ry="5" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
-      <ellipse cx="70" cy="220" rx="7" ry="5" fill="#1e1e35" stroke="#3a3a60" strokeWidth="0.8" />
+      <ellipse cx="50" cy="220" rx="7" ry="5" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
+      <ellipse cx="70" cy="220" rx="7" ry="5" fill="#1a1a32" stroke="#252540" strokeWidth="0.6"/>
     </svg>
   );
 }
@@ -304,9 +298,9 @@ export default function ExercisePicker({
   onConfirmMulti,
 }) {
   const [activeMuscle, setActiveMuscle] = useState(null); // ключ из MUSCLES
-  const [search, setSearch] = useState('');
-  const [mode, setMode] = useState('body');
-  const [multiPicked, setMultiPicked] = useState(new Set());
+  const [search, setSearch]             = useState('');
+  const [mode, setMode]                 = useState('body');
+  const [multiPicked, setMultiPicked]   = useState(new Set());
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -371,24 +365,24 @@ export default function ExercisePicker({
       >
         {/* Шапка */}
         <div className="flex-shrink-0 px-4 pt-3 pb-0">
-          <div className="w-10 h-1 bg-dark-border rounded-full mx-auto mb-3 sm:hidden" />
+          <div className="w-10 h-1 bg-dark-border rounded-full mx-auto mb-3 sm:hidden"/>
           <div className="flex items-center gap-2 mb-2">
             <h2 className="font-semibold flex-1 text-base">{title}</h2>
             <div className="flex bg-dark-elevated rounded-lg p-0.5 border border-dark-border">
               <button onClick={() => setMode('body')}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all
-                  ${mode === 'body' ? 'bg-primary-600 text-white' : 'text-dark-muted hover:text-dark-text'}`}>
+                  ${mode==='body' ? 'bg-primary-600 text-white' : 'text-dark-muted hover:text-dark-text'}`}>
                 🫀 Тело
               </button>
               <button onClick={() => setMode('search')}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all
-                  ${mode === 'search' ? 'bg-primary-600 text-white' : 'text-dark-muted hover:text-dark-text'}`}>
+                  ${mode==='search' ? 'bg-primary-600 text-white' : 'text-dark-muted hover:text-dark-text'}`}>
                 🔍 Поиск
               </button>
             </div>
             <button onClick={onClose}
               className="p-1.5 text-dark-muted hover:text-dark-text rounded-lg hover:bg-dark-elevated transition-colors">
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5"/>
             </button>
           </div>
 
@@ -399,12 +393,12 @@ export default function ExercisePicker({
               <div className="flex items-center gap-2 h-7 mb-1">
                 {activeMuscle ? (
                   <>
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: activeColor }} />
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: activeColor }}/>
                     <span className="text-sm font-semibold" style={{ color: activeColor }}>{activeLabelRu}</span>
                     <span className="text-xs text-dark-muted">· {filtered.length} упр.</span>
                     <button onClick={reset}
                       className="ml-auto flex items-center gap-1 text-xs text-dark-muted hover:text-primary-400 transition-colors">
-                      <RotateCcw className="w-3 h-3" /> Сбросить
+                      <RotateCcw className="w-3 h-3"/> Сбросить
                     </button>
                   </>
                 ) : (
@@ -416,11 +410,11 @@ export default function ExercisePicker({
               <div className="flex gap-2 items-start">
                 <div className="flex flex-col items-center" style={{ width: 108 }}>
                   <p className="text-[9px] text-dark-muted uppercase tracking-widest mb-0.5">Перёд</p>
-                  <BodyFront activeMuscles={activeMuscles} hasExercises={hasExercises} onMuscleClick={handleMuscleClick} />
+                  <BodyFront activeMuscles={activeMuscles} hasExercises={hasExercises} onMuscleClick={handleMuscleClick}/>
                 </div>
                 <div className="flex flex-col items-center" style={{ width: 108 }}>
                   <p className="text-[9px] text-dark-muted uppercase tracking-widest mb-0.5">Зад</p>
-                  <BodyBack activeMuscles={activeMuscles} hasExercises={hasExercises} onMuscleClick={handleMuscleClick} />
+                  <BodyBack activeMuscles={activeMuscles} hasExercises={hasExercises} onMuscleClick={handleMuscleClick}/>
                 </div>
 
                 {/* Список мышечных групп справа */}
@@ -439,7 +433,7 @@ export default function ExercisePicker({
                           backgroundColor: 'transparent',
                           borderColor: '#2a2a4a',
                         }}>
-                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: meta.color }} />
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: meta.color }}/>
                         <span className="text-xs truncate" style={{ color: isActive ? meta.color : '#8a8aaa' }}>
                           {meta.ru}
                         </span>
@@ -456,15 +450,15 @@ export default function ExercisePicker({
           {mode === 'search' && (
             <div className="pb-2">
               <div className="relative mb-2">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-muted" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-muted"/>
                 <input ref={searchRef} type="text" value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Жим, тяга, приседания..."
-                  className="input-field w-full pl-9 pr-8" />
+                  className="input-field w-full pl-9 pr-8"/>
                 {search && (
                   <button onClick={() => setSearch('')}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-muted">
-                    <X className="w-3.5 h-3.5" />
+                    <X className="w-3.5 h-3.5"/>
                   </button>
                 )}
               </div>
@@ -494,14 +488,14 @@ export default function ExercisePicker({
               {(search || activeMuscle) && (
                 <p className="text-xs text-dark-muted mt-1.5">
                   {filtered.length === 0 ? 'Ничего не найдено' :
-                    `${filtered.length} упражн${filtered.length === 1 ? 'ение' : filtered.length < 5 ? 'ения' : 'ений'}`}
+                    `${filtered.length} упражн${filtered.length===1?'ение':filtered.length<5?'ения':'ений'}`}
                 </p>
               )}
             </div>
           )}
         </div>
 
-        <div className="h-px bg-dark-border/50 flex-shrink-0" />
+        <div className="h-px bg-dark-border/50 flex-shrink-0"/>
 
         {/* Список упражнений */}
         <div className="overflow-y-auto flex-1 px-3 py-2">
@@ -516,9 +510,9 @@ export default function ExercisePicker({
             <div className="space-y-0.5">
               {filtered.map(exercise => {
                 const inWorkout = selectedIds.has(exercise.id);
-                const inMulti = multiPicked.has(exercise.id);
-                const keys = getMuscleKeys(exercise);
-                const dotColor = keys[0] && MUSCLES[keys[0]] ? MUSCLES[keys[0]].color : '#0d9488';
+                const inMulti   = multiPicked.has(exercise.id);
+                const keys      = getMuscleKeys(exercise);
+                const dotColor  = keys[0] && MUSCLES[keys[0]] ? MUSCLES[keys[0]].color : '#0d9488';
                 const isHighlighted = activeMuscle && keys.includes(activeMuscle);
 
                 return (
@@ -537,7 +531,7 @@ export default function ExercisePicker({
                     <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"
                       style={{ backgroundColor: `${dotColor}18`, border: `1px solid ${dotColor}35`, color: dotColor }}>
                       {inMulti || (inWorkout && !multiSelect)
-                        ? <Check className="w-3.5 h-3.5" />
+                        ? <Check className="w-3.5 h-3.5"/>
                         : (exercise.name_ru?.[0] ?? '?')}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -558,7 +552,7 @@ export default function ExercisePicker({
                     {inWorkout && !multiSelect
                       ? <span className="text-xs text-primary-400 font-medium flex-shrink-0">в тренировке</span>
                       : !multiSelect
-                        ? <ChevronRight className="w-4 h-4 text-dark-muted flex-shrink-0 opacity-40" />
+                        ? <ChevronRight className="w-4 h-4 text-dark-muted flex-shrink-0 opacity-40"/>
                         : null}
                   </button>
                 );
@@ -571,8 +565,8 @@ export default function ExercisePicker({
           <div className="px-4 pb-5 pt-2 border-t border-dark-border flex-shrink-0">
             <button onClick={() => onConfirmMulti?.(exercises.filter(e => multiPicked.has(e.id)))}
               className="btn-primary w-full flex items-center justify-center gap-2">
-              <Check className="w-4 h-4" />
-              Добавить {multiPicked.size} упражн{multiPicked.size === 1 ? 'ение' : multiPicked.size < 5 ? 'ения' : 'ений'}
+              <Check className="w-4 h-4"/>
+              Добавить {multiPicked.size} упражн{multiPicked.size===1?'ение':multiPicked.size<5?'ения':'ений'}
             </button>
           </div>
         )}
