@@ -1,127 +1,62 @@
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Save, X, Dumbbell, Clock, History, ChevronRight } from 'lucide-react';
+import {
+  Plus, Save, X, Dumbbell, Clock, ChevronDown, ChevronUp,
+  Pencil, Trash2, Check, History
+} from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
-import ExerciseHistoryModal from '../components/ExerciseHistoryModal';
-import {
-  applyWeightChange,
-  formatWeightValue,
-  requestSessionSummary
-} from '../lib/aiSuggest';
+import { applyWeightChange, formatWeightValue, requestSessionSummary } from '../lib/aiSuggest';
 
-function parseNumberInput(value) {
+// ─────────────────────────────────────────────────────────────────────────────
+// Утилиты
+// ─────────────────────────────────────────────────────────────────────────────
+function parseNum(value) {
   if (value === null || value === undefined || value === '') return null;
-  const normalized = String(value).replace(',', '.').trim();
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : null;
+  const n = Number(String(value).replace(',', '.').trim());
+  return Number.isFinite(n) ? n : null;
 }
 
-function repsLabel(n) {
-  if (n === 1) return 'повторение';
-  if (n >= 2 && n <= 4) return 'повторения';
-  return 'повторений';
+function fmtVol(kg) {
+  if (kg >= 1000) return `${(kg / 1000).toFixed(1)}т`;
+  return `${Math.round(kg)} кг`;
 }
 
-// ─── Компонент: баннер "из прошлой тренировки" ───────────────────────────────
-function HistoryBanner({ date, setsTotal, currentSetIndex }) {
-  const dateStr = date
-    ? format(parseISO(date), 'd MMMM', { locale: ru })
-    : null;
-
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-600/10 border border-primary-600/20 mb-3">
-      <Clock className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
-      <p className="text-xs text-primary-300 flex-1">
-        Заполнено из тренировки
-        {dateStr ? <span className="font-medium text-primary-200"> {dateStr}</span> : ''}
-        {setsTotal > 0 && (
-          <span className="text-primary-400">
-            {' '}· подход {Math.min(currentSetIndex + 1, setsTotal)} из {setsTotal}
-          </span>
-        )}
-      </p>
-    </div>
-  );
-}
-
-// ─── Компонент: карточка добавленного сета ────────────────────────────────────
-function SetCard({ set, index, isFromHistory }) {
-  const vol = Math.round((parseFloat(set.weight_kg) || 0) * (set.reps || 0));
-  return (
-    <div className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all
-      ${isFromHistory
-        ? 'bg-dark-elevated border-dark-border'
-        : 'bg-dark-surface border-primary-600/30 shadow-sm'}`}
-    >
-      <div className="flex items-center gap-3">
-        <span className="text-xs font-mono text-dark-muted w-5">#{index + 1}</span>
-        <div>
-          <span className="font-semibold">
-            {set.weight_kg} кг × {set.reps}
-          </span>
-          {set.rpe && (
-            <span className="text-xs text-dark-muted ml-2">RPE {set.rpe}</span>
-          )}
-        </div>
-      </div>
-      <span className="text-sm text-dark-muted">{vol} кг</span>
-    </div>
-  );
-}
-
-// ─── Компонент: модал шаблона тренировки ─────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SaveTemplateModal
+// ─────────────────────────────────────────────────────────────────────────────
 function SaveTemplateModal({ exercises, sets, onSave, onSkip }) {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
-
-  // Группируем упражнения
-  const exerciseSummary = exercises.map(ex => {
-    const exSets = sets.filter(s => s.exercise_id === ex.id);
-    return { ...ex, setsCount: exSets.length };
-  });
 
   async function handleSave() {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      // 1. Создаём план
-      const { data: plan, error: planErr } = await supabase
+      const { data: plan, error: e1 } = await supabase
         .from('workout_plans')
         .insert({
-          user_id:       SINGLE_USER_ID,
-          name:          name.trim(),
-          description:   `Шаблон из тренировки ${format(new Date(), 'd MMMM yyyy', { locale: ru })}`,
-          goal:          'strength',
-          days_per_week: 1,
-          duration_weeks: 1,
-        })
-        .select('id')
-        .single();
-      if (planErr) throw planErr;
+          user_id: SINGLE_USER_ID,
+          name: name.trim(),
+          description: `Шаблон от ${format(new Date(), 'd MMMM yyyy', { locale: ru })}`,
+          goal: 'strength', days_per_week: 1, duration_weeks: 1,
+        }).select('id').single();
+      if (e1) throw e1;
 
-      // 2. Добавляем упражнения
-      const planExercises = exerciseSummary.map((ex, i) => ({
-        plan_id:       plan.id,
-        exercise_id:   ex.id,
-        day_number:    1,
-        exercise_order: i + 1,
-        target_sets:   ex.setsCount,
-        target_reps_min: null,
-        target_reps_max: null,
+      const rows = exercises.map((ex, i) => ({
+        plan_id: plan.id, exercise_id: ex.id,
+        day_number: 1, exercise_order: i + 1,
+        target_sets: sets.filter(s => s.exercise_id === ex.id).length,
+        target_reps_min: null, target_reps_max: null,
       }));
-      const { error: exErr } = await supabase.from('plan_exercises').insert(planExercises);
-      if (exErr) throw exErr;
-
+      const { error: e2 } = await supabase.from('plan_exercises').insert(rows);
+      if (e2) throw e2;
       onSave(plan.id);
     } catch (e) {
-      console.error('Save template error:', e);
+      console.error(e);
       alert('Ошибка сохранения шаблона');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   }
 
   return (
@@ -130,93 +65,550 @@ function SaveTemplateModal({ exercises, sets, onSave, onSkip }) {
       <div className="relative w-full max-w-lg bg-dark-surface rounded-t-2xl border-t border-dark-border p-5 pb-8">
         <div className="w-10 h-1 bg-dark-border rounded-full mx-auto mb-5" />
         <h3 className="font-semibold text-lg mb-1">Сохранить как шаблон?</h3>
-        <p className="text-sm text-dark-muted mb-4">
-          Создай шаблон, чтобы быстро повторить эту тренировку
-        </p>
-
-        <div className="space-y-2 mb-4">
-          {exerciseSummary.map(ex => (
-            <div key={ex.id} className="flex items-center gap-2 text-sm">
+        <p className="text-sm text-dark-muted mb-4">Быстро повторить эту тренировку в следующий раз</p>
+        <div className="space-y-1.5 mb-4">
+          {exercises.map(ex => (
+            <div key={ex.id} className="flex items-center gap-2 text-sm py-1">
               <Dumbbell className="w-4 h-4 text-primary-500 flex-shrink-0" />
-              <span>{ex.name_ru}</span>
-              <span className="text-dark-muted">· {ex.setsCount} подх.</span>
+              <span className="flex-1">{ex.name_ru}</span>
+              <span className="text-dark-muted text-xs">
+                {sets.filter(s => s.exercise_id === ex.id).length} подх.
+              </span>
             </div>
           ))}
         </div>
-
         <div className="mb-4">
-          <label className="text-sm text-dark-muted block mb-2">Название шаблона</label>
-          <input
-            type="text"
+          <label className="text-sm text-dark-muted block mb-2">Название</label>
+          <input type="text" autoFocus
             placeholder={`Тренировка ${format(new Date(), 'd MMMM', { locale: ru })}`}
-            value={name}
-            onChange={e => setName(e.target.value)}
-            className="input-field w-full"
-            autoFocus
-          />
+            value={name} onChange={e => setName(e.target.value)}
+            className="input-field w-full" />
         </div>
-
         <div className="flex gap-2">
-          <button
-            onClick={handleSave}
-            disabled={saving || !name.trim()}
-            className="btn-primary flex-1"
-          >
+          <button onClick={handleSave} disabled={saving || !name.trim()} className="btn-primary flex-1">
             {saving ? 'Сохраняем...' : 'Сохранить'}
           </button>
-          <button onClick={onSkip} className="btn-secondary flex-1">
-            Пропустить
-          </button>
+          <button onClick={onSkip} className="btn-secondary flex-1">Пропустить</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── ГЛАВНЫЙ КОМПОНЕНТ ────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SetRow — строка подхода с inline-редактированием
+// ─────────────────────────────────────────────────────────────────────────────
+function SetRow({ set, index, onUpdate, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    weight_kg: String(set.weight_kg),
+    reps: String(set.reps),
+    rpe: set.rpe != null ? String(set.rpe) : '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function saveEdit() {
+    const w = parseNum(draft.weight_kg);
+    const r = parseInt(draft.reps, 10);
+    const rpe = parseNum(draft.rpe);
+    if (w === null || w < 0 || isNaN(r) || r < 1) return;
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('sets')
+        .update({ weight_kg: w, reps: r, rpe: rpe && rpe > 0 ? rpe : null })
+        .eq('id', set.id)
+        .select('*, exercises(name_ru, primary_muscle)')
+        .single();
+      if (error) throw error;
+      onUpdate(data);
+      setEditing(false);
+    } catch (e) { console.error(e); alert('Ошибка сохранения'); }
+    finally { setSaving(false); }
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Удалить подход #${index + 1}?`)) return;
+    const { error } = await supabase
+      .from('sets')
+      .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+      .eq('id', set.id);
+    if (error) { alert('Ошибка удаления'); return; }
+    onDelete(set.id);
+  }
+
+  const vol = Math.round((parseFloat(set.weight_kg) || 0) * (set.reps || 0));
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-dark-elevated border border-primary-500/40">
+        <span className="text-xs font-mono text-dark-muted w-6 flex-shrink-0">#{index + 1}</span>
+        <input type="number" inputMode="decimal" step="0.5"
+          value={draft.weight_kg} onChange={e => setDraft(p => ({ ...p, weight_kg: e.target.value }))}
+          className="input-field w-20 text-sm py-1 px-2" placeholder="кг" />
+        <span className="text-dark-muted text-xs">×</span>
+        <input type="number" inputMode="numeric"
+          value={draft.reps} onChange={e => setDraft(p => ({ ...p, reps: e.target.value }))}
+          className="input-field w-16 text-sm py-1 px-2" placeholder="повт" />
+        <input type="number" inputMode="decimal" step="0.5" min="1" max="10"
+          value={draft.rpe} onChange={e => setDraft(p => ({ ...p, rpe: e.target.value }))}
+          className="input-field w-16 text-sm py-1 px-2" placeholder="RPE" />
+        <button onClick={saveEdit} disabled={saving}
+          className="p-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 flex-shrink-0">
+          <Check className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={() => setEditing(false)}
+          className="p-1.5 rounded-lg bg-dark-border text-dark-muted hover:bg-dark-elevated flex-shrink-0">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-dark-elevated border border-dark-border group">
+      <span className="text-xs font-mono text-dark-muted w-6 flex-shrink-0">#{index + 1}</span>
+      <div className="flex-1">
+        <span className="font-semibold text-sm">{set.weight_kg} кг × {set.reps}</span>
+        {set.rpe && <span className="text-xs text-dark-muted ml-2">RPE {set.rpe}</span>}
+      </div>
+      <span className="text-xs text-dark-muted">{vol} кг</span>
+      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <button onClick={() => setEditing(true)}
+          className="p-1.5 rounded-lg hover:bg-dark-border text-dark-muted hover:text-dark-text transition-colors">
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button onClick={handleDelete}
+          className="p-1.5 rounded-lg hover:bg-red-500/15 text-dark-muted hover:text-red-400 transition-colors">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ExerciseAccordion — одна карточка упражнения
+// ─────────────────────────────────────────────────────────────────────────────
+function ExerciseAccordion({ exercise, isActive, sets, onSetAdded, onSetUpdated, onSetDeleted, workoutRef, workoutCreatingRef, onWorkoutCreated }) {
+  const [open, setOpen] = useState(isActive);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // Форма
+  const [quickSet, setQuickSet] = useState({ weight_kg: '', reps: '', rpe: '' });
+  const [adding, setAdding] = useState(false);
+
+  // История
+  const [pastHistory, setPastHistory] = useState(null); // { date, sets[] }
+  const [fullHistory, setFullHistory] = useState({});   // { date: sets[] }
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const exerciseSets = useMemo(
+    () => sets.filter(s => s.exercise_id === exercise.id),
+    [sets, exercise.id]
+  );
+
+  const lastSet = exerciseSets.at(-1) ?? null;
+
+  const canChangeWeight =
+    parseNum(quickSet.weight_kg) !== null || parseNum(lastSet?.weight_kg) !== null;
+
+  // ── Открываем/закрываем при isActive ──────────────────────────────────────
+  useEffect(() => { if (isActive) setOpen(true); }, [isActive]);
+
+  // ── Загрузка истории при открытии ─────────────────────────────────────────
+  // ИСПРАВЛЕНИЕ: запрашиваем sets напрямую, не exercise_progress
+  // Не используем order по вложенной таблице — сортируем в JS
+  useEffect(() => {
+    if (!open || pastHistory !== null) return; // уже загружено или закрыто
+
+    let cancelled = false;
+    setLoadingHistory(true);
+
+    async function load() {
+      try {
+        // Шаг 1: получаем все workout_id для этого упражнения (последние тренировки)
+        const { data: rawSets, error } = await supabase
+          .from('sets')
+          .select('weight_kg, reps, rpe, set_order, workout_id')
+          .eq('exercise_id', exercise.id)
+          .eq('is_deleted', false)
+          .eq('is_warmup', false)
+          .order('set_order', { ascending: true })
+          .limit(200);
+
+        if (error) throw error;
+        if (cancelled || !rawSets?.length) {
+          if (!cancelled) { setPastHistory(null); setLoadingHistory(false); }
+          return;
+        }
+
+        // Шаг 2: получаем даты тренировок
+        const workoutIds = [...new Set(rawSets.map(s => s.workout_id))];
+        const { data: workoutsData, error: wErr } = await supabase
+          .from('workouts')
+          .select('id, workout_date')
+          .in('id', workoutIds)
+          .eq('is_deleted', false)
+          .order('workout_date', { ascending: false });
+
+        if (wErr) throw wErr;
+        if (cancelled) return;
+
+        // Шаг 3: создаём map workout_id → date
+        const wMap = {};
+        (workoutsData || []).forEach(w => { wMap[w.id] = w.workout_date; });
+
+        // Шаг 4: группируем подходы по дате
+        const grouped = {};
+        rawSets.forEach(s => {
+          const d = wMap[s.workout_id];
+          if (!d) return; // тренировка is_deleted — пропускаем
+          if (!grouped[d]) grouped[d] = [];
+          grouped[d].push({
+            weight_kg: parseFloat(s.weight_kg),
+            reps: s.reps,
+            rpe: s.rpe,
+          });
+        });
+
+        setFullHistory(grouped);
+
+        // Шаг 5: последняя дата (кроме текущей тренировки если workout уже создан)
+        const today = new Date().toISOString().split('T')[0];
+        const currentWorkoutId = workoutRef.current?.id;
+        const datesDesc = Object.keys(grouped).sort().reverse();
+
+        // Исключаем сегодняшнюю только если она совпадает с текущей тренировкой
+        const lastDate = datesDesc.find(d => {
+          if (d !== today) return true;
+          // Если сегодня — проверяем, это текущая тренировка или нет
+          // Если текущей тренировки нет ещё, то сегодняшняя = прошлая
+          return !currentWorkoutId;
+        }) || datesDesc[0];
+
+        const historySets = grouped[lastDate] || [];
+
+        if (!cancelled) {
+          setPastHistory(historySets.length ? { date: lastDate, sets: historySets } : null);
+
+          // Автозаполнение первого подхода
+          if (historySets.length && exerciseSets.length === 0) {
+            const first = historySets[0];
+            setQuickSet({
+              weight_kg: formatWeightValue(first.weight_kg),
+              reps: String(first.reps),
+              rpe: first.rpe != null ? String(first.rpe) : '',
+            });
+          }
+        }
+      } catch (e) {
+        console.error('History load error:', e);
+        if (!cancelled) setPastHistory(null);
+      } finally {
+        if (!cancelled) setLoadingHistory(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [open, exercise.id]); // eslint-disable-line
+
+  // ── Автозаполнение следующего подхода после добавления ────────────────────
+  function prefillNext(newCount) {
+    if (!pastHistory?.sets) return;
+    const next = pastHistory.sets[newCount];
+    if (next) {
+      setQuickSet({
+        weight_kg: formatWeightValue(next.weight_kg),
+        reps: String(next.reps),
+        rpe: next.rpe != null ? String(next.rpe) : '',
+      });
+    } else {
+      setQuickSet(p => ({ ...p, reps: '', rpe: '' }));
+    }
+  }
+
+  function adjustWeight(mult) {
+    const next = applyWeightChange({
+      currentWeight: quickSet.weight_kg,
+      fallbackWeight: lastSet?.weight_kg,
+      multiplier: mult,
+    });
+    if (next) setQuickSet(p => ({ ...p, weight_kg: next }));
+  }
+
+  async function ensureWorkout() {
+    if (workoutRef.current) return workoutRef.current;
+    if (workoutCreatingRef.current) {
+      // Ждём пока создастся
+      await new Promise(res => setTimeout(res, 800));
+      return workoutRef.current;
+    }
+    workoutCreatingRef.current = true;
+    try {
+      const { data, error } = await supabase
+        .from('workouts')
+        .insert({
+          user_id: SINGLE_USER_ID,
+          workout_date: new Date().toISOString().split('T')[0],
+          start_time: new Date().toISOString(),
+        }).select().single();
+      if (error) throw error;
+      onWorkoutCreated(data);
+      workoutRef.current = data;
+      return data;
+    } catch (e) {
+      console.error(e);
+      alert('Ошибка создания тренировки');
+      return null;
+    } finally { workoutCreatingRef.current = false; }
+  }
+
+  async function addSet() {
+    const weight = parseNum(quickSet.weight_kg);
+    const reps = parseInt(quickSet.reps, 10);
+    const rpe = parseNum(quickSet.rpe);
+
+    if (!quickSet.weight_kg || !quickSet.reps) { alert('Заполни вес и повторения'); return; }
+    if (weight === null || weight < 0) { alert('Вес ≥ 0 кг'); return; }
+    if (isNaN(reps) || reps < 1) { alert('Повторений ≥ 1'); return; }
+    if (rpe !== null && (rpe < 1 || rpe > 10)) { alert('RPE от 1 до 10'); return; }
+
+    const w = await ensureWorkout();
+    if (!w) return;
+
+    setAdding(true);
+    try {
+      const { data, error } = await supabase
+        .from('sets')
+        .insert({
+          workout_id: w.id,
+          exercise_id: exercise.id,
+          set_order: exerciseSets.length + 1,
+          weight_kg: weight, reps,
+          rpe: rpe && rpe > 0 ? rpe : null,
+        })
+        .select('*, exercises(name_ru, primary_muscle)')
+        .single();
+      if (error) throw error;
+      onSetAdded(data);
+      prefillNext(exerciseSets.length + 1);
+    } catch (e) {
+      console.error(e);
+      alert('Ошибка добавления подхода');
+    } finally { setAdding(false); }
+  }
+
+  const exVol = Math.round(
+    exerciseSets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0)
+  );
+
+  const showBanner = pastHistory && !loadingHistory && exerciseSets.length < (pastHistory.sets?.length ?? 0);
+
+  return (
+    <div className={`rounded-2xl border transition-all duration-200 overflow-hidden
+      ${open
+        ? 'border-primary-500/40 bg-dark-surface shadow-lg shadow-primary-900/20'
+        : 'border-dark-border bg-dark-surface hover:border-dark-muted/40'
+      }`}
+    >
+      {/* ── Заголовок аккордеона ── */}
+      <button
+        className="w-full flex items-center gap-3 p-4 text-left"
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors
+          ${open ? 'bg-primary-600/20' : 'bg-dark-elevated'}`}>
+          <Dumbbell className={`w-4.5 h-4.5 ${open ? 'text-primary-400' : 'text-dark-muted'}`} style={{ width: '1.125rem', height: '1.125rem' }} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`font-semibold truncate ${open ? 'text-dark-text' : 'text-dark-muted'}`}>
+            {exercise.name_ru}
+          </p>
+          <p className="text-xs text-dark-muted truncate">
+            {exercise.primary_muscle}
+            {exerciseSets.length > 0 && (
+              <span className="ml-2 text-primary-400">
+                · {exerciseSets.length} подх. · {fmtVol(exVol)}
+              </span>
+            )}
+          </p>
+        </div>
+        {open
+          ? <ChevronUp className="w-4 h-4 text-dark-muted flex-shrink-0" />
+          : <ChevronDown className="w-4 h-4 text-dark-muted flex-shrink-0" />
+        }
+      </button>
+
+      {/* ── Тело аккордеона ── */}
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-dark-border/50 pt-3">
+
+          {/* Баннер истории */}
+          {loadingHistory && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-dark-elevated">
+              <div className="w-3 h-3 rounded-full border-2 border-primary-400 border-t-transparent animate-spin" />
+              <span className="text-xs text-dark-muted">Загружаем историю...</span>
+            </div>
+          )}
+          {showBanner && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary-600/10 border border-primary-600/20">
+              <Clock className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
+              <p className="text-xs text-primary-300 flex-1">
+                Из тренировки
+                <span className="font-medium text-primary-200">
+                  {' '}{format(parseISO(pastHistory.date), 'd MMMM', { locale: ru })}
+                </span>
+                <span className="text-primary-400">
+                  {' '}· подход {exerciseSets.length + 1} из {pastHistory.sets.length}
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* Кнопки ±% и Повторить */}
+          <div className="flex gap-2 flex-wrap">
+            {lastSet && (
+              <button type="button" onClick={() => setQuickSet({
+                weight_kg: formatWeightValue(lastSet.weight_kg),
+                reps: String(lastSet.reps),
+                rpe: lastSet.rpe != null ? String(lastSet.rpe) : '',
+              })}
+                className="btn-secondary text-xs px-3 py-1.5">
+                Повторить
+              </button>
+            )}
+            <button type="button" onClick={() => adjustWeight(1.05)} disabled={!canChangeWeight}
+              className="btn-secondary text-xs px-3 py-1.5">+5%</button>
+            <button type="button" onClick={() => adjustWeight(0.95)} disabled={!canChangeWeight}
+              className="btn-secondary text-xs px-3 py-1.5">−5%</button>
+            {/* Кнопка показать историю */}
+            {Object.keys(fullHistory).length > 0 && (
+              <button type="button" onClick={() => setShowHistory(s => !s)}
+                className="btn-secondary text-xs px-3 py-1.5 flex items-center gap-1 ml-auto">
+                <History className="w-3.5 h-3.5" />
+                {showHistory ? 'Скрыть' : 'История'}
+              </button>
+            )}
+          </div>
+
+          {/* Форма подхода */}
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-dark-muted mb-1 block">Вес, кг</label>
+              <input type="number" inputMode="decimal" step="0.5" min="0"
+                value={quickSet.weight_kg}
+                onChange={e => setQuickSet(p => ({ ...p, weight_kg: e.target.value }))}
+                className="input-field w-full" placeholder="100" />
+            </div>
+            <div>
+              <label className="text-xs text-dark-muted mb-1 block">Повторения</label>
+              <input type="number" inputMode="numeric" min="1"
+                value={quickSet.reps}
+                onChange={e => setQuickSet(p => ({ ...p, reps: e.target.value }))}
+                className="input-field w-full" placeholder="10" />
+            </div>
+            <div>
+              <label className="text-xs text-dark-muted mb-1 block">RPE</label>
+              <input type="number" inputMode="decimal" step="0.5" min="1" max="10"
+                value={quickSet.rpe}
+                onChange={e => setQuickSet(p => ({ ...p, rpe: e.target.value }))}
+                className="input-field w-full" placeholder="—" />
+            </div>
+          </div>
+
+          <button onClick={addSet} disabled={adding}
+            className="btn-primary w-full flex items-center justify-center gap-1.5">
+            <Plus className="w-4 h-4" />
+            {adding ? 'Добавляем...' : `Подход ${exerciseSets.length + 1}`}
+          </button>
+
+          {/* Добавленные подходы */}
+          {exerciseSets.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <p className="text-xs text-dark-muted font-medium">Подходы</p>
+              {exerciseSets.map((set, idx) => (
+                <SetRow
+                  key={set.id} set={set} index={idx}
+                  onUpdate={updated => onSetUpdated(updated)}
+                  onDelete={id => onSetDeleted(id)}
+                />
+              ))}
+              <div className="text-right text-xs text-dark-muted pt-1">
+                Объём упражнения: <span className="text-dark-text font-medium">{fmtVol(exVol)}</span>
+              </div>
+            </div>
+          )}
+
+          {/* История (раскрываемая) */}
+          {showHistory && Object.keys(fullHistory).length > 0 && (
+            <div className="pt-2 border-t border-dark-border/50">
+              <p className="text-xs text-dark-muted font-medium mb-2">История упражнения</p>
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                {Object.keys(fullHistory).sort().reverse().map(date => (
+                  <div key={date}>
+                    <p className="text-xs text-dark-muted mb-1.5">
+                      {format(parseISO(date), 'd MMMM yyyy', { locale: ru })}
+                    </p>
+                    <div className="space-y-1">
+                      {fullHistory[date].map((s, i) => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-elevated text-sm">
+                          <span className="text-xs text-dark-muted w-5">#{i + 1}</span>
+                          <span className="flex-1 font-medium">{s.weight_kg} кг × {s.reps}</span>
+                          {s.rpe && <span className="text-xs text-dark-muted">RPE {s.rpe}</span>}
+                          <button
+                            onClick={() => {
+                              setQuickSet({
+                                weight_kg: formatWeightValue(s.weight_kg),
+                                reps: String(s.reps),
+                                rpe: s.rpe != null ? String(s.rpe) : '',
+                              });
+                            }}
+                            className="text-xs text-primary-400 hover:text-primary-300 transition-colors px-1"
+                          >
+                            ↑ вставить
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ГЛАВНЫЙ КОМПОНЕНТ
+// ─────────────────────────────────────────────────────────────────────────────
 export default function LogWorkoutPage() {
   const navigate = useNavigate();
 
-  const [workout, setWorkout]               = useState(null);
-  const [workoutCreating, setWorkoutCreating] = useState(false);
+  const [workout, setWorkout] = useState(null);
   const workoutRef = useRef(null);
+  const workoutCreatingRef = useRef(false);
 
-  const [exercises, setExercises]           = useState([]);
-  const [selectedExercise, setSelectedExercise] = useState(null);
-  // Порядок упражнений в текущей тренировке
-  const [workoutExercises, setWorkoutExercises] = useState([]); // [{id, name_ru, primary_muscle}]
-  const [sets, setSets]                     = useState([]);
+  const [exercises, setExercises] = useState([]);
+  const [workoutExercises, setWorkoutExercises] = useState([]); // [{id, name_ru, ...}]
+  const [activeExerciseId, setActiveExerciseId] = useState(null); // последнее добавленное
+  const [sets, setSets] = useState([]);
 
-  const [showExercisePicker, setShowExercisePicker] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState('');
   const [finishingWorkout, setFinishingWorkout] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [sessionSummary, setSessionSummary]       = useState(null);
+  const [sessionSummary, setSessionSummary] = useState(null);
 
-  // ─── История: загружается при выборе упражнения ──────────────────────────
-  // { date: '2025-03-01', sets: [{weight_kg, reps, rpe}] } | null
-  const [pastHistory, setPastHistory]             = useState(null);
-  const [loadingHistory, setLoadingHistory]       = useState(false);
-  const [showHistoryModal, setShowHistoryModal]   = useState(false);
-  const [fullHistory, setFullHistory]             = useState({}); // grouped_by_date
-
-  const [quickSet, setQuickSet] = useState({ weight_kg: '', reps: '', rpe: '' });
-
-  // Синхронизируем ref для cleanup
+  // Sync workout ref
   useEffect(() => { workoutRef.current = workout; }, [workout]);
 
-  const selectedExerciseSets = useMemo(() =>
-    !selectedExercise?.id ? [] : sets.filter(s => s.exercise_id === selectedExercise.id),
-    [sets, selectedExercise?.id]
-  );
-
-  const lastExerciseSet = selectedExerciseSets.at(-1) ?? null;
-
-  const canChangeWeight =
-    parseNumberInput(quickSet.weight_kg) !== null ||
-    parseNumberInput(lastExerciseSet?.weight_kg) !== null;
-
-  // ─── Cleanup: мягкое удаление пустой тренировки при уходе ────────────────
+  // Cleanup: soft-delete если ушли без подходов
   useEffect(() => {
     loadExercises();
     return () => {
@@ -227,225 +619,64 @@ export default function LogWorkoutPage() {
           if (data && (parseFloat(data.total_volume_kg) || 0) === 0) {
             supabase.from('workouts')
               .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-              .eq('id', w.id).then(() => {});
+              .eq('id', w.id).then(() => { });
           }
         });
     };
   }, []);
 
-  // ─── КЛЮЧЕВОЙ ФИКС: история загружается ТОЛЬКО по selectedExercise.id ────
-  // Не зависит от workout.id — работает до первого подхода
-  useEffect(() => {
-    if (!selectedExercise?.id) {
-      setPastHistory(null);
-      setFullHistory({});
-      return;
-    }
-
-    let cancelled = false;
-    setLoadingHistory(true);
-    setPastHistory(null);
-
-    async function loadHistory() {
-      try {
-        // Получаем последние N подходов из exercise_progress view
-        // Запрашиваем из sets напрямую — exercise_progress не имеет set_order
-        // !inner в select автоматически фильтрует строки где workouts = null
-        // Фильтр по workouts.is_deleted через синтаксис PostgREST
-        const { data } = await supabase
-          .from('sets')
-          .select('weight_kg, reps, rpe, set_order, workouts!inner(workout_date)')
-          .eq('exercise_id', selectedExercise.id)
-          .eq('is_deleted', false)
-          .eq('is_warmup', false)
-          .eq('workouts.is_deleted', false)
-          .order('workouts(workout_date)', { ascending: false })
-          .order('set_order', { ascending: true })
-          .limit(100);
-
-        if (cancelled || !data?.length) return;
-
-        // Группируем по дате (workout_date вложен в workouts при запросе из sets)
-        const grouped = {};
-        data.forEach(row => {
-          const d = row.workouts?.workout_date || row.workout_date;
-          if (!grouped[d]) grouped[d] = [];
-          grouped[d].push({
-            weight_kg: parseFloat(row.weight_kg),
-            reps:      row.reps,
-            rpe:       row.rpe,
-          });
-        });
-
-        setFullHistory(grouped);
-
-        // Берём ПОСЛЕДНЮЮ дату (исключая текущую тренировку если есть)
-        const today = new Date().toISOString().split('T')[0];
-        const dates = Object.keys(grouped).sort().reverse();
-        const lastDate = dates[0] === today ? dates[1] : dates[0];
-
-        if (!lastDate) return;
-
-        const historySets = grouped[lastDate] || [];
-
-        if (!cancelled) {
-          setPastHistory({ date: lastDate, sets: historySets });
-
-          // Автозаполнение: первый подход из предыдущей тренировки
-          const firstSet = historySets[0];
-          if (firstSet) {
-            setQuickSet({
-              weight_kg: formatWeightValue(firstSet.weight_kg),
-              reps:      String(firstSet.reps),
-              rpe:       firstSet.rpe != null ? String(firstSet.rpe) : '',
-            });
-          }
-        }
-      } catch (e) {
-        console.error('History load error:', e);
-      } finally {
-        if (!cancelled) setLoadingHistory(false);
-      }
-    }
-
-    loadHistory();
-    return () => { cancelled = true; };
-  }, [selectedExercise?.id]); // ← только exercise_id, без workout.id!
-
-  // ─── При добавлении подхода — автозаполнение следующего из истории ────────
-  function advanceHistoryPrefill(newSetsCount) {
-    if (!pastHistory?.sets) return;
-    const nextSet = pastHistory.sets[newSetsCount]; // индекс = количество уже добавленных
-    if (nextSet) {
-      setQuickSet({
-        weight_kg: formatWeightValue(nextSet.weight_kg),
-        reps:      String(nextSet.reps),
-        rpe:       nextSet.rpe != null ? String(nextSet.rpe) : '',
-      });
-    } else {
-      // История закончилась — оставляем вес, очищаем повторения
-      setQuickSet(prev => ({ ...prev, reps: '', rpe: '' }));
-    }
-  }
-
   async function loadExercises() {
     const { data } = await supabase
-      .from('exercises')
-      .select('*')
-      .eq('is_deleted', false)
-      .order('name_ru');
+      .from('exercises').select('*').eq('is_deleted', false).order('name_ru');
     if (data) setExercises(data);
   }
 
-  async function ensureWorkoutCreated() {
-    if (workoutRef.current) return workoutRef.current;
-    if (workoutCreating) return null;
-    try {
-      setWorkoutCreating(true);
-      const { data, error } = await supabase
-        .from('workouts')
-        .insert({
-          user_id:      SINGLE_USER_ID,
-          workout_date: new Date().toISOString().split('T')[0],
-          start_time:   new Date().toISOString(),
-        })
-        .select()
-        .single();
-      if (error) throw error;
-      setWorkout(data);
-      workoutRef.current = data;
-      return data;
-    } catch (e) {
-      console.error('Error creating workout:', e);
-      alert('Ошибка создания тренировки');
-      return null;
-    } finally {
-      setWorkoutCreating(false);
+  function handleWorkoutCreated(w) {
+    setWorkout(w);
+    workoutRef.current = w;
+  }
+
+  function handleSetAdded(set) {
+    setSets(prev => [...prev, set]);
+    // Добавляем упражнение в список если ещё нет
+    if (!workoutExercises.find(e => e.id === set.exercise_id)) {
+      const ex = exercises.find(e => e.id === set.exercise_id);
+      if (ex) setWorkoutExercises(prev => [...prev, ex]);
     }
   }
 
-  function adjustWeight(multiplier) {
-    const next = applyWeightChange({
-      currentWeight:  quickSet.weight_kg,
-      fallbackWeight: lastExerciseSet?.weight_kg,
-      multiplier,
-    });
-    if (next) setQuickSet(prev => ({ ...prev, weight_kg: next }));
+  function handleSetUpdated(updated) {
+    setSets(prev => prev.map(s => s.id === updated.id ? updated : s));
   }
 
-  // ─── Добавление подхода (принимает явные значения — нет race condition) ───
-  async function addSetWithValues(weight_kg_raw, reps_raw, rpe_raw) {
-    const weight = parseNumberInput(weight_kg_raw);
-    const reps   = parseInt(reps_raw, 10);
-    const parsedRpe = parseNumberInput(rpe_raw);
-    const rpe    = parsedRpe !== null && parsedRpe > 0 ? parsedRpe : null;
+  function handleSetDeleted(id) {
+    setSets(prev => prev.filter(s => s.id !== id));
+  }
 
-    if (!weight_kg_raw || !reps_raw) { alert('Заполни вес и повторения'); return; }
-    if (weight === null || weight < 0) { alert('Вес ≥ 0 кг'); return; }
-    if (isNaN(reps) || reps < 1) { alert('Повторений ≥ 1'); return; }
-    if (rpe !== null && (rpe < 1 || rpe > 10)) { alert('RPE от 1 до 10'); return; }
-
-    const w = await ensureWorkoutCreated();
-    if (!w) return;
-
-    try {
-      const currentSetsForExercise = sets.filter(s => s.exercise_id === selectedExercise.id);
-
-      const { data, error } = await supabase
-        .from('sets')
-        .insert({
-          workout_id:  w.id,
-          exercise_id: selectedExercise.id,
-          set_order:   currentSetsForExercise.length + 1,
-          weight_kg:   weight,
-          reps,
-          rpe,
-        })
-        .select('*, exercises(name_ru, primary_muscle)')
-        .single();
-
-      if (error) throw error;
-
-      const newSets = [...sets, data];
-      setSets(newSets);
-
-      // Запоминаем упражнение в списке тренировки (если первый раз)
-      if (!workoutExercises.find(e => e.id === selectedExercise.id)) {
-        setWorkoutExercises(prev => [...prev, selectedExercise]);
-      }
-
-      // Автозаполнение следующего подхода из истории
-      advanceHistoryPrefill(currentSetsForExercise.length + 1);
-    } catch (e) {
-      console.error('Error adding set:', e);
-      alert('Ошибка добавления подхода');
+  function pickExercise(exercise) {
+    // Если уже добавлено — просто разворачиваем
+    if (workoutExercises.find(e => e.id === exercise.id)) {
+      setActiveExerciseId(exercise.id);
+      setShowPicker(false);
+      setPickerSearch('');
+      return;
     }
-  }
-
-  function addSet() {
-    addSetWithValues(quickSet.weight_kg, quickSet.reps, quickSet.rpe);
-  }
-
-  function handleAddSetFromHistory(set) {
-    addSetWithValues(
-      set.weight_kg != null ? String(set.weight_kg) : '',
-      set.reps      != null ? String(set.reps)      : '',
-      set.rpe       != null ? String(set.rpe)       : ''
-    );
+    // Новое упражнение
+    setWorkoutExercises(prev => [...prev, exercise]);
+    setActiveExerciseId(exercise.id);
+    setShowPicker(false);
+    setPickerSearch('');
   }
 
   async function finishWorkout() {
     if (finishingWorkout) return;
     if (sets.length === 0) { navigate('/'); return; }
     if (!workout?.id) return;
-
     try {
       setFinishingWorkout(true);
       await supabase.from('workouts')
-        .update({ end_time: new Date().toISOString() })
-        .eq('id', workout.id);
-
-      let summary = null;
+        .update({ end_time: new Date().toISOString() }).eq('id', workout.id);
+      let summary;
       try {
         summary = await requestSessionSummary({
           workoutId: workout.id,
@@ -453,9 +684,7 @@ export default function LogWorkoutPage() {
         });
       } catch {
         summary = {
-          summary: `Отличная тренировка! ${sets.length} подходов, ${Math.round(
-            sets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0)
-          )} кг объёма.`,
+          summary: `Хорошая тренировка! ${sets.length} подходов, ${fmtVol(totalVolume)} объёма.`,
           highlights: [`Упражнений: ${workoutExercises.length}`, `Подходов: ${sets.length}`],
           suggestions: [],
         };
@@ -463,349 +692,173 @@ export default function LogWorkoutPage() {
       setSessionSummary(summary);
       setShowSummaryModal(true);
     } catch (e) {
-      console.error('Error finishing:', e);
+      console.error(e);
       alert('Ошибка завершения тренировки');
-    } finally {
-      setFinishingWorkout(false);
-    }
+    } finally { setFinishingWorkout(false); }
   }
 
   const totalVolume = Math.round(
     sets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0)
   );
 
-  // Текущий индекс подхода для баннера
-  const currentHistoryIdx = selectedExerciseSets.length;
-  const showHistoryBanner = pastHistory && !loadingHistory && pastHistory.sets.length > 0;
+  const filteredExercises = exercises.filter(e =>
+    e.name_ru?.toLowerCase().includes(pickerSearch.toLowerCase()) ||
+    e.primary_muscle?.toLowerCase().includes(pickerSearch.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen bg-dark-bg">
+    <div className="min-h-screen bg-dark-bg pb-24">
 
-      {/* ─── Header ─── */}
-      <div className="bg-dark-surface border-b border-dark-border p-4 safe-top">
-        <div className="flex items-center justify-between gap-2">
+      {/* ── Header ── */}
+      <div className="bg-dark-surface border-b border-dark-border p-4 safe-top sticky top-0 z-20">
+        <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold">Новая тренировка</h1>
             {sets.length > 0 && (
               <p className="text-xs text-dark-muted mt-0.5">
-                {sets.length} подх. · {totalVolume.toLocaleString('ru')} кг объёма
+                {workoutExercises.length} упр. · {sets.length} подх. · {fmtVol(totalVolume)}
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Кнопка + Упражнение — всегда видна */}
-            <button
-              onClick={() => {
-                setSelectedExercise(null);
-                setShowExercisePicker(true);
-              }}
-              className="flex items-center gap-1 bg-dark-elevated border border-dark-border
-                         text-dark-text text-sm font-medium px-3 py-2 rounded-lg
-                         hover:border-primary-500/50 transition-colors"
-              title="Добавить упражнение"
-            >
-              <Plus className="w-4 h-4 text-primary-500" />
-              <span className="hidden sm:inline">Упражнение</span>
-            </button>
-            <button
-              onClick={finishWorkout}
-              disabled={finishingWorkout}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Save className="w-4 h-4" />
-              <span>
-                {finishingWorkout ? 'Завершение...' : sets.length === 0 ? 'Отмена' : 'Завершить'}
-              </span>
-            </button>
-          </div>
+          <button
+            onClick={() => { setPickerSearch(''); setShowPicker(true); }}
+            className="flex items-center gap-1.5 bg-dark-elevated border border-dark-border
+                       text-sm font-medium px-3 py-2 rounded-xl
+                       hover:border-primary-500/50 hover:text-primary-400 transition-colors flex-shrink-0"
+          >
+            <Plus className="w-4 h-4 text-primary-500" />
+            <span className="hidden sm:inline">Упражнение</span>
+          </button>
+          <button
+            onClick={finishWorkout}
+            disabled={finishingWorkout}
+            className="btn-primary flex items-center gap-1.5 flex-shrink-0"
+          >
+            <Save className="w-4 h-4" />
+            {finishingWorkout ? 'Завершение...' : sets.length === 0 ? 'Отмена' : 'Завершить'}
+          </button>
         </div>
       </div>
 
-      {/* ─── Контент ─── */}
-      {!selectedExercise ? (
-        <div className="p-4 space-y-4">
-
-          {/* Добавить упражнение */}
+      {/* ── Список упражнений (аккордеоны) ── */}
+      <div className="p-4 space-y-3">
+        {workoutExercises.length === 0 ? (
+          /* Стартовый экран */
           <button
-            onClick={() => setShowExercisePicker(true)}
-            className="w-full card-elevated py-8 text-center hover:border-primary-500/50 transition-all"
+            onClick={() => { setPickerSearch(''); setShowPicker(true); }}
+            className="w-full card-elevated py-12 text-center hover:border-primary-500/40 transition-all"
           >
-            <Plus className="w-10 h-10 mx-auto text-primary-500 mb-2" />
-            <p className="font-medium">Выбрать упражнение</p>
-            {sets.length > 0 && (
-              <p className="text-sm text-dark-muted mt-1">или завершите тренировку</p>
-            )}
+            <div className="w-16 h-16 rounded-2xl bg-primary-600/15 flex items-center justify-center mx-auto mb-3">
+              <Plus className="w-8 h-8 text-primary-400" />
+            </div>
+            <p className="font-semibold text-lg">Начать тренировку</p>
+            <p className="text-sm text-dark-muted mt-1">Выберите первое упражнение</p>
           </button>
+        ) : (
+          workoutExercises.map(exercise => (
+            <ExerciseAccordion
+              key={exercise.id}
+              exercise={exercise}
+              isActive={exercise.id === activeExerciseId}
+              sets={sets}
+              onSetAdded={handleSetAdded}
+              onSetUpdated={handleSetUpdated}
+              onSetDeleted={handleSetDeleted}
+              workoutRef={workoutRef}
+              workoutCreatingRef={workoutCreatingRef}
+              onWorkoutCreated={handleWorkoutCreated}
+            />
+          ))
+        )}
 
-          {/* Уже добавленные упражнения */}
-          {workoutExercises.length > 0 && (
-            <div>
-              <p className="text-xs text-dark-muted font-medium mb-2 px-1">В этой тренировке</p>
-              <div className="space-y-2">
-                {workoutExercises.map(ex => {
-                  const exSets = sets.filter(s => s.exercise_id === ex.id);
-                  const vol    = exSets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0);
-                  return (
-                    <button
-                      key={ex.id}
-                      onClick={() => setSelectedExercise(ex)}
-                      className="w-full card flex items-center gap-3 text-left hover:bg-dark-elevated transition-colors"
-                    >
-                      <Dumbbell className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">{ex.name_ru}</p>
-                        <p className="text-xs text-dark-muted">
-                          {exSets.length} подходов · {Math.round(vol)} кг
-                        </p>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-dark-muted" />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
-      ) : (
-        <div className="p-4 space-y-3">
-
-          {/* ─── Карточка выбранного упражнения ─── */}
-          <div className="card">
-            <div className="flex items-center gap-3">
-              <Dumbbell className="w-5 h-5 text-primary-500 flex-shrink-0" />
-              <div className="flex-1">
-                <p className="font-semibold">{selectedExercise.name_ru}</p>
-                <p className="text-xs text-dark-muted">{selectedExercise.primary_muscle}</p>
-              </div>
-              {/* Кнопка История */}
-              <button
-                onClick={() => setShowHistoryModal(true)}
-                className="flex items-center gap-1 text-xs text-dark-muted hover:text-primary-400
-                           bg-dark-elevated rounded-lg px-2.5 py-1.5 transition-colors"
-              >
-                <History className="w-3.5 h-3.5" />
-                История
-              </button>
-              <button
-                onClick={() => setSelectedExercise(null)}
-                className="p-1.5 hover:bg-dark-elevated rounded-lg transition-colors text-dark-muted"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* ─── Форма быстрого добавления ─── */}
-          <div className="card space-y-3">
-            <p className="text-sm font-medium">
-              Подход {selectedExerciseSets.length + 1}
-            </p>
-
-            {/* Баннер истории */}
-            {loadingHistory && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-dark-elevated border border-dark-border">
-                <div className="w-3 h-3 rounded-full border-2 border-primary-400 border-t-transparent animate-spin" />
-                <p className="text-xs text-dark-muted">Загружаем историю...</p>
-              </div>
-            )}
-
-            {showHistoryBanner && (
-              <HistoryBanner
-                date={pastHistory.date}
-                setsTotal={pastHistory.sets.length}
-                currentSetIndex={currentHistoryIdx}
-              />
-            )}
-
-            {/* Кнопки быстрого изменения */}
-            <div className="flex gap-2 flex-wrap">
-              {lastExerciseSet && (
-                <button
-                  type="button"
-                  onClick={() => setQuickSet({
-                    weight_kg: formatWeightValue(lastExerciseSet.weight_kg),
-                    reps:      String(lastExerciseSet.reps),
-                    rpe:       lastExerciseSet.rpe != null ? String(lastExerciseSet.rpe) : '',
-                  })}
-                  className="btn-secondary text-xs px-3 py-1.5"
-                >
-                  Повторить
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => adjustWeight(1.05)}
-                disabled={!canChangeWeight}
-                className="btn-secondary text-xs px-3 py-1.5"
-              >
-                +5%
-              </button>
-              <button
-                type="button"
-                onClick={() => adjustWeight(0.95)}
-                disabled={!canChangeWeight}
-                className="btn-secondary text-xs px-3 py-1.5"
-              >
-                −5%
-              </button>
-            </div>
-
-            {/* Поля ввода */}
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="text-xs text-dark-muted mb-1 block">Вес, кг</label>
-                <input
-                  type="number"
-                  value={quickSet.weight_kg}
-                  onChange={e => setQuickSet(p => ({ ...p, weight_kg: e.target.value }))}
-                  className="input-field w-full"
-                  placeholder="100"
-                  step="0.5"
-                  min="0"
-                  inputMode="decimal"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-dark-muted mb-1 block">Повторения</label>
-                <input
-                  type="number"
-                  value={quickSet.reps}
-                  onChange={e => setQuickSet(p => ({ ...p, reps: e.target.value }))}
-                  className="input-field w-full"
-                  placeholder="10"
-                  min="1"
-                  inputMode="numeric"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-dark-muted mb-1 block">RPE</label>
-                <input
-                  type="number"
-                  value={quickSet.rpe}
-                  onChange={e => setQuickSet(p => ({ ...p, rpe: e.target.value }))}
-                  className="input-field w-full"
-                  placeholder="—"
-                  min="1"
-                  max="10"
-                  step="0.5"
-                  inputMode="decimal"
-                />
-              </div>
-            </div>
-
-            <button
-              onClick={addSet}
-              disabled={workoutCreating}
-              className="btn-primary w-full"
-            >
-              <Plus className="w-4 h-4 inline mr-1.5" />
-              {workoutCreating ? 'Создаём тренировку...' : 'Добавить подход'}
-            </button>
-          </div>
-
-          {/* ─── Список добавленных подходов ─── */}
-          {selectedExerciseSets.length > 0 && (
-            <div className="space-y-2">
-              {selectedExerciseSets.map((set, idx) => (
-                <SetCard
-                  key={set.id}
-                  set={set}
-                  index={idx}
-                  isFromHistory={idx > 0}
-                />
-              ))}
-              <div className="text-right text-xs text-dark-muted pr-1">
-                Объём: {Math.round(
-                  selectedExerciseSets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0)
-                ).toLocaleString('ru')} кг
-              </div>
-            </div>
-          )}
-
-          {/* ─── Следующее упражнение ─── */}
+        {/* Кнопка добавить упражнение внизу списка */}
+        {workoutExercises.length > 0 && (
           <button
-            onClick={() => {
-              setSelectedExercise(null);
-              setShowExercisePicker(true);
-            }}
-            className="w-full flex items-center justify-center gap-2 py-3 px-4
-                       border border-dashed border-dark-border rounded-xl
-                       text-dark-muted hover:border-primary-500/50 hover:text-primary-400
-                       transition-colors text-sm"
+            onClick={() => { setPickerSearch(''); setShowPicker(true); }}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
+                       border border-dashed border-dark-border text-dark-muted text-sm
+                       hover:border-primary-500/40 hover:text-primary-400 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Добавить следующее упражнение
+            Добавить упражнение
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* ─── Пикер упражнений ─── */}
-      {showExercisePicker && (
+      {/* ── Пикер упражнений ── */}
+      {showPicker && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-dark-surface w-full sm:max-w-lg sm:rounded-xl max-h-[80vh] overflow-hidden">
-            <div className="p-4 border-b border-dark-border flex items-center justify-between">
-              <h2 className="font-semibold">Выбрать упражнение</h2>
-              <button onClick={() => setShowExercisePicker(false)} className="p-2 text-dark-muted">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="overflow-y-auto max-h-[60vh] p-3 space-y-1">
-              {exercises.map(exercise => (
-                <button
-                  key={exercise.id}
-                  onClick={() => {
-                    // Сбрасываем форму и историю перед выбором нового упражнения
-                    setQuickSet({ weight_kg: '', reps: '', rpe: '' });
-                    setPastHistory(null);
-                    setFullHistory({});
-                    setSelectedExercise(exercise);
-                    setShowExercisePicker(false);
-                  }}
-                  className="w-full card hover:bg-dark-elevated transition-colors text-left py-3"
-                >
-                  <p className="font-medium">{exercise.name_ru}</p>
-                  <p className="text-xs text-dark-muted">{exercise.primary_muscle}</p>
+          <div className="bg-dark-surface w-full sm:max-w-lg sm:rounded-2xl max-h-[85vh] flex flex-col rounded-t-2xl overflow-hidden">
+            <div className="p-4 border-b border-dark-border">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold">Выбрать упражнение</h2>
+                <button onClick={() => setShowPicker(false)} className="p-2 text-dark-muted">
+                  <X className="w-5 h-5" />
                 </button>
-              ))}
+              </div>
+              {/* Поиск */}
+              <input
+                type="text"
+                autoFocus
+                placeholder="Поиск..."
+                value={pickerSearch}
+                onChange={e => setPickerSearch(e.target.value)}
+                className="input-field w-full"
+              />
+            </div>
+            <div className="overflow-y-auto flex-1 p-3 space-y-1">
+              {filteredExercises.length === 0 && (
+                <p className="text-center text-dark-muted py-8 text-sm">Ничего не найдено</p>
+              )}
+              {filteredExercises.map(exercise => {
+                const already = workoutExercises.some(e => e.id === exercise.id);
+                return (
+                  <button
+                    key={exercise.id}
+                    onClick={() => pickExercise(exercise)}
+                    className={`w-full text-left py-3 px-3 rounded-xl transition-colors
+                      ${already
+                        ? 'bg-primary-600/10 border border-primary-600/20'
+                        : 'hover:bg-dark-elevated'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium flex-1">{exercise.name_ru}</p>
+                      {already && (
+                        <span className="text-xs text-primary-400 font-medium">в тренировке</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-dark-muted">{exercise.primary_muscle}</p>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
 
-      {/* ─── Модал итога тренировки ─── */}
+      {/* ── Итог тренировки ── */}
       {showSummaryModal && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-dark-surface w-full sm:max-w-xl sm:rounded-xl border border-dark-border overflow-hidden">
-            <div className="p-4 border-b border-dark-border flex items-center justify-between">
+          <div className="bg-dark-surface w-full sm:max-w-xl sm:rounded-2xl border border-dark-border overflow-hidden rounded-t-2xl">
+            <div className="p-4 border-b border-dark-border">
               <h2 className="text-lg font-semibold">Тренировка завершена 🏋️</h2>
             </div>
             <div className="p-4 space-y-4">
-
-              {/* Статы */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-dark-elevated rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold">{sets.length}</p>
-                  <p className="text-xs text-dark-muted">подходов</p>
-                </div>
-                <div className="bg-dark-elevated rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold">{workoutExercises.length}</p>
-                  <p className="text-xs text-dark-muted">упражнений</p>
-                </div>
-                <div className="bg-dark-elevated rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold">
-                    {totalVolume >= 1000
-                      ? `${(totalVolume / 1000).toFixed(1)}т`
-                      : totalVolume}
-                  </p>
-                  <p className="text-xs text-dark-muted">объём</p>
-                </div>
+                {[
+                  [sets.length, 'подходов'],
+                  [workoutExercises.length, 'упражнений'],
+                  [fmtVol(totalVolume), 'объём'],
+                ].map(([v, l]) => (
+                  <div key={l} className="bg-dark-elevated rounded-xl p-3 text-center">
+                    <p className="text-2xl font-bold">{v}</p>
+                    <p className="text-xs text-dark-muted">{l}</p>
+                  </div>
+                ))}
               </div>
-
               {sessionSummary?.summary && (
                 <p className="text-sm text-dark-muted">{sessionSummary.summary}</p>
               )}
-
               {sessionSummary?.highlights?.length > 0 && (
                 <div>
                   <p className="text-sm font-medium mb-1">Итоги</p>
@@ -814,14 +867,12 @@ export default function LogWorkoutPage() {
                   ))}
                 </div>
               )}
-
               <div className="flex flex-col gap-2">
                 <button
                   onClick={() => { setShowSummaryModal(false); setShowTemplateModal(true); }}
                   className="btn-secondary w-full flex items-center justify-center gap-2"
                 >
-                  <Save className="w-4 h-4" />
-                  Сохранить как шаблон
+                  <Save className="w-4 h-4" />Сохранить как шаблон
                 </button>
                 <button
                   onClick={() => navigate(`/workouts/${workout.id}`)}
@@ -835,42 +886,15 @@ export default function LogWorkoutPage() {
         </div>
       )}
 
-      {/* ─── Модал сохранения шаблона ─── */}
+      {/* ── Шаблон ── */}
       {showTemplateModal && (
         <SaveTemplateModal
           exercises={workoutExercises}
           sets={sets}
-          onSave={(planId) => {
-            setShowTemplateModal(false);
-            navigate(`/workouts/${workout.id}`);
-          }}
-          onSkip={() => {
-            setShowTemplateModal(false);
-            navigate(`/workouts/${workout.id}`);
-          }}
+          onSave={() => { setShowTemplateModal(false); navigate(`/workouts/${workout.id}`); }}
+          onSkip={() => { setShowTemplateModal(false); navigate(`/workouts/${workout.id}`); }}
         />
       )}
-
-      {/* ─── История упражнения ─── */}
-      <ExerciseHistoryModal
-        isOpen={showHistoryModal}
-        onClose={() => setShowHistoryModal(false)}
-        exerciseName={selectedExercise?.name_ru}
-        history={fullHistory}
-        onAddSet={handleAddSetFromHistory}
-        onAddAllFromDate={(date) => {
-          const dateSets = fullHistory[date] || [];
-          dateSets.forEach((s, i) => {
-            setTimeout(() => {
-              addSetWithValues(
-                s.weight_kg != null ? String(s.weight_kg) : '',
-                s.reps      != null ? String(s.reps)      : '',
-                s.rpe       != null ? String(s.rpe)       : ''
-              );
-            }, i * 200);
-          });
-        }}
-      />
     </div>
   );
 }
