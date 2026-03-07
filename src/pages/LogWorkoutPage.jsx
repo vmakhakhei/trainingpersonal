@@ -8,6 +8,7 @@ import { format, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { supabase, SINGLE_USER_ID } from '../lib/supabase';
 import { applyWeightChange, formatWeightValue, requestSessionSummary } from '../lib/aiSuggest';
+import ExercisePicker from '../components/ExercisePicker';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Утилиты
@@ -420,7 +421,7 @@ function ExerciseAccordion({ exercise, isActive, sets, onSetAdded, onSetUpdated,
       >
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors
           ${open ? 'bg-primary-600/20' : 'bg-dark-elevated'}`}>
-          <Dumbbell className={`w-4.5 h-4.5 ${open ? 'text-primary-400' : 'text-dark-muted'}`} style={{ width: '1.125rem', height: '1.125rem' }} />
+          <Dumbbell className={`w-4.5 h-4.5 ${open ? 'text-primary-400' : 'text-dark-muted'}`} style={{width:'1.125rem',height:'1.125rem'}} />
         </div>
         <div className="flex-1 min-w-0">
           <p className={`font-semibold truncate ${open ? 'text-dark-text' : 'text-dark-muted'}`}>
@@ -471,10 +472,10 @@ function ExerciseAccordion({ exercise, isActive, sets, onSetAdded, onSetUpdated,
           <div className="flex gap-2 flex-wrap">
             {lastSet && (
               <button type="button" onClick={() => setQuickSet({
-                weight_kg: formatWeightValue(lastSet.weight_kg),
-                reps: String(lastSet.reps),
-                rpe: lastSet.rpe != null ? String(lastSet.rpe) : '',
-              })}
+                  weight_kg: formatWeightValue(lastSet.weight_kg),
+                  reps: String(lastSet.reps),
+                  rpe: lastSet.rpe != null ? String(lastSet.rpe) : '',
+                })}
                 className="btn-secondary text-xs px-3 py-1.5">
                 Повторить
               </button>
@@ -589,21 +590,20 @@ function ExerciseAccordion({ exercise, isActive, sets, onSetAdded, onSetUpdated,
 export default function LogWorkoutPage() {
   const navigate = useNavigate();
 
-  const [workout, setWorkout] = useState(null);
-  const workoutRef = useRef(null);
-  const workoutCreatingRef = useRef(false);
+  const [workout, setWorkout]         = useState(null);
+  const workoutRef                    = useRef(null);
+  const workoutCreatingRef            = useRef(false);
 
-  const [exercises, setExercises] = useState([]);
+  const [exercises, setExercises]     = useState([]);
   const [workoutExercises, setWorkoutExercises] = useState([]); // [{id, name_ru, ...}]
   const [activeExerciseId, setActiveExerciseId] = useState(null); // последнее добавленное
-  const [sets, setSets] = useState([]);
+  const [sets, setSets]               = useState([]);
 
-  const [showPicker, setShowPicker] = useState(false);
-  const [pickerSearch, setPickerSearch] = useState('');
+  const [showPicker, setShowPicker]   = useState(false);
   const [finishingWorkout, setFinishingWorkout] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [sessionSummary, setSessionSummary] = useState(null);
+  const [sessionSummary, setSessionSummary]       = useState(null);
 
   // Sync workout ref
   useEffect(() => { workoutRef.current = workout; }, [workout]);
@@ -619,7 +619,7 @@ export default function LogWorkoutPage() {
           if (data && (parseFloat(data.total_volume_kg) || 0) === 0) {
             supabase.from('workouts')
               .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-              .eq('id', w.id).then(() => { });
+              .eq('id', w.id).then(() => {});
           }
         });
     };
@@ -654,18 +654,14 @@ export default function LogWorkoutPage() {
   }
 
   function pickExercise(exercise) {
-    // Если уже добавлено — просто разворачиваем
+    // Если уже добавлено — просто разворачиваем аккордеон
     if (workoutExercises.find(e => e.id === exercise.id)) {
       setActiveExerciseId(exercise.id);
-      setShowPicker(false);
-      setPickerSearch('');
       return;
     }
-    // Новое упражнение
+    // Новое упражнение — добавляем в список и разворачиваем
     setWorkoutExercises(prev => [...prev, exercise]);
     setActiveExerciseId(exercise.id);
-    setShowPicker(false);
-    setPickerSearch('');
   }
 
   async function finishWorkout() {
@@ -701,10 +697,7 @@ export default function LogWorkoutPage() {
     sets.reduce((s, x) => s + (parseFloat(x.weight_kg) || 0) * (x.reps || 0), 0)
   );
 
-  const filteredExercises = exercises.filter(e =>
-    e.name_ru?.toLowerCase().includes(pickerSearch.toLowerCase()) ||
-    e.primary_muscle?.toLowerCase().includes(pickerSearch.toLowerCase())
-  );
+
 
   return (
     <div className="min-h-screen bg-dark-bg pb-24">
@@ -721,7 +714,7 @@ export default function LogWorkoutPage() {
             )}
           </div>
           <button
-            onClick={() => { setPickerSearch(''); setShowPicker(true); }}
+            onClick={() => { setShowPicker(true); }}
             className="flex items-center gap-1.5 bg-dark-elevated border border-dark-border
                        text-sm font-medium px-3 py-2 rounded-xl
                        hover:border-primary-500/50 hover:text-primary-400 transition-colors flex-shrink-0"
@@ -745,7 +738,7 @@ export default function LogWorkoutPage() {
         {workoutExercises.length === 0 ? (
           /* Стартовый экран */
           <button
-            onClick={() => { setPickerSearch(''); setShowPicker(true); }}
+            onClick={() => { setShowPicker(true); }}
             className="w-full card-elevated py-12 text-center hover:border-primary-500/40 transition-all"
           >
             <div className="w-16 h-16 rounded-2xl bg-primary-600/15 flex items-center justify-center mx-auto mb-3">
@@ -774,7 +767,7 @@ export default function LogWorkoutPage() {
         {/* Кнопка добавить упражнение внизу списка */}
         {workoutExercises.length > 0 && (
           <button
-            onClick={() => { setPickerSearch(''); setShowPicker(true); }}
+            onClick={() => { setShowPicker(true); }}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
                        border border-dashed border-dark-border text-dark-muted text-sm
                        hover:border-primary-500/40 hover:text-primary-400 transition-colors"
@@ -787,53 +780,12 @@ export default function LogWorkoutPage() {
 
       {/* ── Пикер упражнений ── */}
       {showPicker && (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center">
-          <div className="bg-dark-surface w-full sm:max-w-lg sm:rounded-2xl max-h-[85vh] flex flex-col rounded-t-2xl overflow-hidden">
-            <div className="p-4 border-b border-dark-border">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-semibold">Выбрать упражнение</h2>
-                <button onClick={() => setShowPicker(false)} className="p-2 text-dark-muted">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              {/* Поиск */}
-              <input
-                type="text"
-                autoFocus
-                placeholder="Поиск..."
-                value={pickerSearch}
-                onChange={e => setPickerSearch(e.target.value)}
-                className="input-field w-full"
-              />
-            </div>
-            <div className="overflow-y-auto flex-1 p-3 space-y-1">
-              {filteredExercises.length === 0 && (
-                <p className="text-center text-dark-muted py-8 text-sm">Ничего не найдено</p>
-              )}
-              {filteredExercises.map(exercise => {
-                const already = workoutExercises.some(e => e.id === exercise.id);
-                return (
-                  <button
-                    key={exercise.id}
-                    onClick={() => pickExercise(exercise)}
-                    className={`w-full text-left py-3 px-3 rounded-xl transition-colors
-                      ${already
-                        ? 'bg-primary-600/10 border border-primary-600/20'
-                        : 'hover:bg-dark-elevated'}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium flex-1">{exercise.name_ru}</p>
-                      {already && (
-                        <span className="text-xs text-primary-400 font-medium">в тренировке</span>
-                      )}
-                    </div>
-                    <p className="text-xs text-dark-muted">{exercise.primary_muscle}</p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <ExercisePicker
+          exercises={exercises}
+          onSelect={ex => { pickExercise(ex); setShowPicker(false); }}
+          onClose={() => setShowPicker(false)}
+          selectedIds={new Set(workoutExercises.map(e => e.id))}
+        />
       )}
 
       {/* ── Итог тренировки ── */}
