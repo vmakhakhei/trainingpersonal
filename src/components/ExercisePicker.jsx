@@ -76,80 +76,110 @@ function getMuscleKeys(ex) {
 //   ACTIVE    — выбрана: полный цвет, яркое свечение (glow-filter) + анимация
 // ─────────────────────────────────────────────────────────────────────────────
 
-function muscleState(key, activeMuscles, hasExercises) {
-  if (activeMuscles.has(key)) return 'active';
-  if (hasExercises.has(key)) return 'available';
+// Четыре состояния:
+//  inactive  — нет упражнений → почти невидима
+//  available — есть упражнения, не выбрана → цветной тинт + пунктир
+//  secondary — вторичная/антагонист активного упражнения → янтарная подсветка
+//  active    — выбранная мышца → полный цвет + glow + пульсация
+const SECONDARY_COLOR = '#f59e0b'; // amber-400
+
+function muscleState(key, activeMuscles, secondaryMuscles, hasExercises) {
+  if (activeMuscles.has(key))  return 'active';
+  if (secondaryMuscles.has(key)) return 'secondary';
+  if (hasExercises.has(key))   return 'available';
   return 'inactive';
 }
 
 function muscleFill(key, state) {
   const c = MUSCLES[key].color;
   if (state === 'active')    return c;
-  if (state === 'available') return `${c}30`;
-  return '#111128';
+  if (state === 'secondary') return `${SECONDARY_COLOR}40`;
+  if (state === 'available') return `${c}28`;
+  return '#0e0e20';
 }
 
 function muscleStroke(key, state) {
   const c = MUSCLES[key].color;
   if (state === 'active')    return c;
-  if (state === 'available') return `${c}aa`;
-  return '#1e1e38';
+  if (state === 'secondary') return `${SECONDARY_COLOR}cc`;
+  if (state === 'available') return `${c}88`;
+  return '#1a1a30';
 }
 
 function muscleStrokeW(state) {
-  if (state === 'active')    return '1.5';
-  if (state === 'available') return '1';
-  return '0.5';
+  if (state === 'active')    return '1.8';
+  if (state === 'secondary') return '1.2';
+  if (state === 'available') return '0.9';
+  return '0.4';
 }
 
 function muscleFilter(state) {
-  return state === 'active' ? 'url(#glow)' : 'none';
+  if (state === 'active')    return 'url(#glow)';
+  if (state === 'secondary') return 'url(#glow-secondary)';
+  return 'none';
 }
 
 function muscleStrokeDash(state) {
-  return state === 'available' ? '2 1.5' : 'none';
+  if (state === 'available') return '2 1.5';
+  if (state === 'secondary') return '3 2';
+  return 'none';
 }
 
 function muscleCls(state) {
-  if (state === 'inactive') return 'cursor-default opacity-40';
+  if (state === 'inactive') return 'cursor-default opacity-25';
   return 'cursor-pointer transition-all duration-200 hover:brightness-125 hover:saturate-150';
 }
 
-// Shared SVG defs (glow filter + pulse animation)
+// Shared SVG defs
 function SvgDefs() {
   return (
     <defs>
-      <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-        <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      {/* Основной glow — для активной мышцы */}
+      <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
         <feMerge>
           <feMergeNode in="blur"/>
           <feMergeNode in="blur"/>
           <feMergeNode in="SourceGraphic"/>
         </feMerge>
       </filter>
+      {/* Вторичный glow — для антагонистов (янтарный, слабее) */}
+      <filter id="glow-secondary" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+        <feFlood floodColor="#f59e0b" floodOpacity="0.3" result="color"/>
+        <feComposite in="color" in2="blur" operator="in" result="coloredBlur"/>
+        <feMerge>
+          <feMergeNode in="coloredBlur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
       <style>{`
         @keyframes muscle-pulse {
           0%, 100% { opacity: 1; }
-          50%       { opacity: 0.7; }
+          50%       { opacity: 0.72; }
         }
-        .m-active {
-          animation: muscle-pulse 1.8s ease-in-out infinite;
+        @keyframes secondary-pulse {
+          0%, 100% { opacity: 0.9; }
+          50%       { opacity: 0.55; }
         }
+        .m-active    { animation: muscle-pulse    1.8s ease-in-out infinite; }
+        .m-secondary { animation: secondary-pulse 2.4s ease-in-out infinite; }
       `}</style>
     </defs>
   );
 }
 
 // Хелпер: пропсы пути по состоянию
-function mp(key, activeMuscles, hasExercises, onClick) {
-  const state = muscleState(key, activeMuscles, hasExercises);
+function mp(key, activeMuscles, secondaryMuscles, hasExercises, onClick) {
+  const state = muscleState(key, activeMuscles, secondaryMuscles, hasExercises);
+  const extraCls = state === 'active' ? ' m-active' : state === 'secondary' ? ' m-secondary' : '';
   return {
     fill:            muscleFill(key, state),
     stroke:          muscleStroke(key, state),
     strokeWidth:     muscleStrokeW(state),
     strokeDasharray: muscleStrokeDash(state),
     filter:          muscleFilter(state),
-    className:       muscleCls(state) + (state === 'active' ? ' m-active' : ''),
+    className:       muscleCls(state) + extraCls,
     onClick:         state !== 'inactive' ? () => onClick(key) : undefined,
   };
 }
@@ -157,8 +187,8 @@ function mp(key, activeMuscles, hasExercises, onClick) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG ТЕЛО — ПЕРЕДНИЙ ВИД  viewBox="0 0 120 280"
 // ─────────────────────────────────────────────────────────────────────────────
-function BodyFront({ activeMuscles, hasExercises, onMuscleClick }) {
-  const p = (key) => mp(key, activeMuscles, hasExercises, onMuscleClick);
+function BodyFront({ activeMuscles, secondaryMuscles, hasExercises, onMuscleClick }) {
+  const p = (key) => mp(key, activeMuscles, secondaryMuscles, hasExercises, onMuscleClick);
 
   return (
     <svg viewBox="0 0 120 280" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%' }}>
@@ -223,8 +253,8 @@ function BodyFront({ activeMuscles, hasExercises, onMuscleClick }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SVG ТЕЛО — ЗАДНИЙ ВИД
 // ─────────────────────────────────────────────────────────────────────────────
-function BodyBack({ activeMuscles, hasExercises, onMuscleClick }) {
-  const p = (key) => mp(key, activeMuscles, hasExercises, onMuscleClick);
+function BodyBack({ activeMuscles, secondaryMuscles, hasExercises, onMuscleClick }) {
+  const p = (key) => mp(key, activeMuscles, secondaryMuscles, hasExercises, onMuscleClick);
 
   return (
     <svg viewBox="0 0 120 280" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%' }}>
@@ -318,6 +348,25 @@ export default function ExercisePicker({
     return activeMuscle ? new Set([activeMuscle]) : new Set();
   }, [activeMuscle]);
 
+  // Вторичные мышцы: собираем из muscle_loads всех отфильтрованных упражнений
+  // кроме самой активной мышцы (она уже в activeMuscles)
+  const secondaryMuscles = useMemo(() => {
+    if (!activeMuscle) return new Set();
+    const set = new Set();
+    const relevantExercises = exercises.filter(ex =>
+      getMuscleKeys(ex).includes(activeMuscle)
+    );
+    relevantExercises.forEach(ex => {
+      const loads = ex.muscle_loads || {};
+      Object.keys(loads).forEach(muscleKey => {
+        if (muscleKey !== activeMuscle && MUSCLES[muscleKey]) {
+          set.add(muscleKey);
+        }
+      });
+    });
+    return set;
+  }, [exercises, activeMuscle]);
+
   function handleMuscleClick(key) {
     setActiveMuscle(prev => prev === key ? null : key);
     setSearch('');
@@ -410,11 +459,11 @@ export default function ExercisePicker({
               <div className="flex gap-2 items-start">
                 <div className="flex flex-col items-center" style={{ width: 108 }}>
                   <p className="text-[9px] text-dark-muted uppercase tracking-widest mb-0.5">Перёд</p>
-                  <BodyFront activeMuscles={activeMuscles} hasExercises={hasExercises} onMuscleClick={handleMuscleClick}/>
+                  <BodyFront activeMuscles={activeMuscles} secondaryMuscles={secondaryMuscles} hasExercises={hasExercises} onMuscleClick={handleMuscleClick}/>
                 </div>
                 <div className="flex flex-col items-center" style={{ width: 108 }}>
                   <p className="text-[9px] text-dark-muted uppercase tracking-widest mb-0.5">Зад</p>
-                  <BodyBack activeMuscles={activeMuscles} hasExercises={hasExercises} onMuscleClick={handleMuscleClick}/>
+                  <BodyBack activeMuscles={activeMuscles} secondaryMuscles={secondaryMuscles} hasExercises={hasExercises} onMuscleClick={handleMuscleClick}/>
                 </div>
 
                 {/* Список мышечных групп справа */}
@@ -512,48 +561,101 @@ export default function ExercisePicker({
                 const inWorkout = selectedIds.has(exercise.id);
                 const inMulti   = multiPicked.has(exercise.id);
                 const keys      = getMuscleKeys(exercise);
-                const dotColor  = keys[0] && MUSCLES[keys[0]] ? MUSCLES[keys[0]].color : '#0d9488';
+                const primaryKey = keys[0];
+                const primaryColor = primaryKey && MUSCLES[primaryKey] ? MUSCLES[primaryKey].color : '#0d9488';
                 const isHighlighted = activeMuscle && keys.includes(activeMuscle);
+
+                // Процентная разбивка из muscle_loads
+                const loads = exercise.muscle_loads || {};
+                const loadEntries = Object.entries(loads)
+                  .filter(([k]) => MUSCLES[k])
+                  .sort(([,a],[,b]) => b - a);
+                const isPrimary = (muscleKey) => getMuscleKeys(exercise).includes(muscleKey);
 
                 return (
                   <button key={exercise.id} onClick={() => handleSelect(exercise)}
-                    className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all
+                    className={`w-full text-left flex flex-col gap-2 px-3 py-2.5 rounded-xl transition-all
                       ${inWorkout && !multiSelect
                         ? 'bg-primary-600/10 border border-primary-600/20'
                         : inMulti
-                          ? 'border border-amber-500/30 bg-amber-500/8'
+                          ? 'border border-amber-500/30'
                           : isHighlighted
                             ? 'border bg-dark-elevated'
                             : 'hover:bg-dark-elevated border border-transparent'}`}
                     style={isHighlighted && !inWorkout && !inMulti
-                      ? { borderColor: `${dotColor}40` }
+                      ? { borderColor: `${primaryColor}40`, backgroundColor: `${primaryColor}06` }
                       : {}}>
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"
-                      style={{ backgroundColor: `${dotColor}18`, border: `1px solid ${dotColor}35`, color: dotColor }}>
-                      {inMulti || (inWorkout && !multiSelect)
-                        ? <Check className="w-3.5 h-3.5"/>
-                        : (exercise.name_ru?.[0] ?? '?')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm leading-tight truncate">{exercise.name_ru}</p>
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <span className="text-xs font-medium" style={{ color: `${dotColor}bb` }}>
-                          {MUSCLES[keys[0]]?.ru ?? exercise.primary_muscle}
-                        </span>
-                        {exercise.equipment && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded-md border
-                            ${EQUIPMENT_COLORS[exercise.equipment] || 'bg-dark-elevated text-dark-muted border-dark-border'}`}>
-                            {EQUIPMENT_LABELS[exercise.equipment] || exercise.equipment}
-                          </span>
-                        )}
-                        {exercise.is_compound && <span className="text-xs text-dark-muted">· база</span>}
+
+                    {/* Верхняя строка: иконка + название + бейджи */}
+                    <div className="flex items-center gap-2.5 w-full">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold"
+                        style={{ backgroundColor: `${primaryColor}18`, border: `1px solid ${primaryColor}35`, color: primaryColor }}>
+                        {inMulti || (inWorkout && !multiSelect)
+                          ? <Check className="w-3.5 h-3.5"/>
+                          : (exercise.name_ru?.[0] ?? '?')}
                       </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm leading-tight truncate">{exercise.name_ru}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {exercise.equipment && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded-md border
+                              ${EQUIPMENT_COLORS[exercise.equipment] || 'bg-dark-elevated text-dark-muted border-dark-border'}`}>
+                              {EQUIPMENT_LABELS[exercise.equipment] || exercise.equipment}
+                            </span>
+                          )}
+                          {exercise.is_compound && (
+                            <span className="text-xs text-dark-muted">база</span>
+                          )}
+                        </div>
+                      </div>
+                      {inWorkout && !multiSelect
+                        ? <span className="text-xs text-primary-400 font-medium flex-shrink-0">в тренировке</span>
+                        : !multiSelect
+                          ? <ChevronRight className="w-4 h-4 text-dark-muted flex-shrink-0 opacity-40"/>
+                          : null}
                     </div>
-                    {inWorkout && !multiSelect
-                      ? <span className="text-xs text-primary-400 font-medium flex-shrink-0">в тренировке</span>
-                      : !multiSelect
-                        ? <ChevronRight className="w-4 h-4 text-dark-muted flex-shrink-0 opacity-40"/>
-                        : null}
+
+                    {/* Мышечная разбивка */}
+                    {loadEntries.length > 0 && (
+                      <div className="w-full">
+                        {/* Сегментированный бар */}
+                        <div className="flex h-1.5 rounded-full overflow-hidden gap-px mb-1.5">
+                          {loadEntries.map(([muscleKey, pct]) => {
+                            const c = MUSCLES[muscleKey].color;
+                            const isP = isPrimary(muscleKey);
+                            return (
+                              <div key={muscleKey}
+                                style={{
+                                  width: `${pct}%`,
+                                  backgroundColor: isP ? c : `${SECONDARY_COLOR}cc`,
+                                  opacity: isP ? 1 : 0.8,
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                        {/* Легенда */}
+                        <div className="flex flex-wrap gap-x-2.5 gap-y-0.5">
+                          {loadEntries.map(([muscleKey, pct]) => {
+                            const c = MUSCLES[muscleKey].color;
+                            const isP = isPrimary(muscleKey);
+                            return (
+                              <div key={muscleKey} className="flex items-center gap-1">
+                                <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: isP ? c : SECONDARY_COLOR }}/>
+                                <span className="text-[10px]" style={{ color: isP ? `${c}dd` : `${SECONDARY_COLOR}99` }}>
+                                  {MUSCLES[muscleKey].ru}
+                                </span>
+                                <span className="text-[10px] font-semibold"
+                                  style={{ color: isP ? `${c}ff` : `${SECONDARY_COLOR}bb` }}>
+                                  {pct}%
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </button>
                 );
               })}
